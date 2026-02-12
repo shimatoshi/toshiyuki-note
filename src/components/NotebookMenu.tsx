@@ -64,9 +64,9 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
           </button>
         </div>
         
-        <div className="menu-footer">
-          <p>Ver 1.4.1 (Refactored)</p>
-        </div>
+      <div className="menu-footer">
+        <p>Toshiyuki Note v1.2.0 (Calendar Fix)</p>
+        <p>&copy; 2026 Shimatoshi</p>
       </div>
     </div>
   )

@@ -34,6 +34,7 @@ function App() {
 
   // Attachment State
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [previewImage, setPreviewImage] = useState<Attachment | null>(null)
 
   // Action: Page Change
@@ -79,9 +80,25 @@ function App() {
     const currentPage = newPages[pageIndex]
     
     const updatedAttachments = currentPage.attachments ? [...currentPage.attachments, newAttachment] : [newAttachment]
+    const attachmentNumber = updatedAttachments.length
+
+    // Insert text reference
+    let newContent = currentPage.content
+    const textarea = textareaRef.current
+    if (textarea) {
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      // Insert (画像N) with a space before if needed, or newline
+      // Simple insertion:
+      const textToInsert = ` (画像${attachmentNumber}) `
+      newContent = newContent.substring(0, start) + textToInsert + newContent.substring(end)
+    } else {
+       newContent += `\n(画像${attachmentNumber})`
+    }
     
     newPages[pageIndex] = {
       ...currentPage,
+      content: newContent,
       attachments: updatedAttachments,
       lastModified: new Date().toISOString(),
     }
@@ -93,7 +110,7 @@ function App() {
   }
 
   const handleDeleteAttachment = async (attachmentId: string) => {
-    if (!currentNotebook || !confirm('画像を削除しますか？')) return
+    if (!currentNotebook || !confirm('画像を削除しますか?\n(本文中の参照テキストは手動で消してください)')) return
 
     const newPages = [...currentNotebook.pages]
     const pageIndex = currentNotebook.currentPage - 1
@@ -298,7 +315,7 @@ function App() {
             </div>
             
             <div className="menu-footer">
-              <p>Ver 1.3.0 (Attachments)</p>
+              <p>Ver 1.4.0 (Attachments Ref)</p>
             </div>
           </div>
         </div>
@@ -365,6 +382,7 @@ function App() {
       {/* Main Editor */}
       <main className="editor-area" {...swipeHandlers}>
         <textarea
+          ref={textareaRef}
           value={currentPageData.content}
           onChange={(e) => handleContentChange(e.target.value)}
           placeholder={`Page ${currentNotebook.currentPage}`}
@@ -374,12 +392,14 @@ function App() {
         {/* Attachments Area */}
         {attachments.length > 0 && (
           <div className="attachments-area">
-            {attachments.map(att => (
+            {attachments.map((att, idx) => (
               <div key={att.id} className="attachment-item" onClick={() => setPreviewImage(att)}>
                 {att.type === 'image' && (
-                  <img src={getImageUrl(att.data as Blob)} alt="attachment" className="attachment-thumb" />
+                  <>
+                    <img src={getImageUrl(att.data as Blob)} alt="attachment" className="attachment-thumb" />
+                    <span className="attachment-badge">{idx + 1}</span>
+                  </>
                 )}
-                {/* Future support for other types */}
               </div>
             ))}
           </div>

@@ -177,34 +177,29 @@ export const useNotebooks = () => {
     
     
     
-      const searchNotebooks = async (query: string) => {
-    
-        return await db.searchAllNotebooks(query)
-    
-      }
-    
-    
-    
-      return {
-    
-        notebooks,
-    
-        currentNotebook,
-    
-        isLoading,
-    
-        createNotebook,
-    
-        loadNotebook,
-    
-        deleteNotebook,
-    
-        updateNotebook,
-    
-        searchNotebooks
-    
-      }
-    
-    }
-    
+        const searchNotebooks = async (query: string) => {
+          return await db.searchAllNotebooks(query)
+        }
+      
+        const getAllFullNotebooks = async () => {
+          const fullNotebooks: Notebook[] = []
+          for (const meta of notebooks) {
+            const nb = await db.getNotebook(meta.id)
+            if (nb) fullNotebooks.push(nb)
+          }
+          return fullNotebooks
+        }
+      
+        return {
+          notebooks,
+          currentNotebook,
+          isLoading,
+          createNotebook,
+          loadNotebook,
+          deleteNotebook,
+          updateNotebook,
+          searchNotebooks,
+          getAllFullNotebooks
+        }
+      }    
     

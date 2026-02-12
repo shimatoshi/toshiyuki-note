@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react'
-import { Menu, Search, Check } from 'lucide-react'
+import { Menu, Search, Edit2, Check, X, Calendar } from 'lucide-react'
 
 interface HeaderProps {
   title: string
   onToggleMenu: () => void
   onToggleSearch: () => void
+  onToggleCalendar: () => void
   onRename: (newTitle: string) => void
 }
 
-export const Header: React.FC<HeaderProps> = ({ title, onToggleMenu, onToggleSearch, onRename }) => {
+export const Header: React.FC<HeaderProps> = ({ 
+  title, 
+  onToggleMenu, 
+  onToggleSearch, 
+  onToggleCalendar,
+  onRename 
+}) => {
   const [isRenaming, setIsRenaming] = useState(false)
   const [tempTitle, setTempTitle] = useState(title)
 
@@ -29,31 +36,46 @@ export const Header: React.FC<HeaderProps> = ({ title, onToggleMenu, onToggleSea
 
   return (
     <header className="header">
-      <button className="icon-btn" onClick={onToggleMenu}>
-        <Menu size={24} />
-      </button>
-      
+      <div className="header-left">
+        {/* Placeholder if needed */}
+      </div>
+
       <div className="title-container">
         {isRenaming ? (
           <div className="rename-box">
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={tempTitle}
               onChange={(e) => setTempTitle(e.target.value)}
-              autoFocus
               onBlur={saveTitle}
               onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
+              autoFocus
             />
-            <button className="icon-btn-small" onClick={saveTitle}><Check size={16} /></button>
+            <button className="icon-btn-small" onClick={saveTitle}>
+              <Check size={18} />
+            </button>
+            <button className="icon-btn-small" onClick={() => setIsRenaming(false)}>
+              <X size={18} />
+            </button>
           </div>
         ) : (
-          <h1 onClick={startRenaming}>{title}</h1>
+          <h1 onClick={startRenaming}>
+            {title} <Edit2 size={14} style={{ marginLeft: 4, opacity: 0.5 }} />
+          </h1>
         )}
       </div>
 
-      <button className="icon-btn" onClick={onToggleSearch}>
-        <Search size={24} />
-      </button>
+      <div className="header-right">
+        <button className="icon-btn" onClick={onToggleCalendar}>
+          <Calendar size={24} />
+        </button>
+        <button className="icon-btn" onClick={onToggleSearch}>
+          <Search size={24} />
+        </button>
+        <button className="icon-btn" onClick={onToggleMenu}>
+          <Menu size={24} />
+        </button>
+      </div>
     </header>
   )
 }

@@ -15,6 +15,7 @@ import { NotebookMenu } from './components/NotebookMenu'
 import { SearchOverlay } from './components/SearchOverlay'
 import { ImagePreview } from './components/ImagePreview'
 import { AttachmentList } from './components/AttachmentList'
+import { CalendarOverlay } from './components/CalendarOverlay'
 
 const TOTAL_PAGES = 50
 
@@ -27,11 +28,13 @@ function App() {
     loadNotebook, 
     deleteNotebook,
     updateNotebook,
-    searchNotebooks
+    searchNotebooks,
+    getAllFullNotebooks
   } = useNotebooks()
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   
   // Search State
   const [searchQuery, setSearchQuery] = useState('')
@@ -320,6 +323,15 @@ function App() {
     setSearchResults([])
   }
 
+  const handleCalendarJump = (notebookId: string, pageNumber: number) => {
+    if (currentNotebook && currentNotebook.id === notebookId) {
+       handlePageChange(pageNumber)
+    } else {
+       loadNotebook(notebookId, pageNumber)
+    }
+    setIsCalendarOpen(false)
+  }
+
   // Swipe Handlers
   const swipeHandlers = useSwipeable({
     onSwipedLeft: handleNextPage,
@@ -344,6 +356,7 @@ function App() {
         title={currentNotebook.title}
         onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
         onToggleSearch={() => setIsSearchOpen(true)}
+        onToggleCalendar={() => setIsCalendarOpen(true)}
         onRename={handleRename}
       />
 
@@ -370,6 +383,13 @@ function App() {
         onJumpToResult={handleJumpToResult}
       />
       
+      <CalendarOverlay 
+        isOpen={isCalendarOpen}
+        onClose={() => setIsCalendarOpen(false)}
+        fetchNotebooks={getAllFullNotebooks}
+        onJumpToPage={handleCalendarJump}
+      />
+
       <ImagePreview 
         attachment={previewImage}
         onClose={() => setPreviewImage(null)}

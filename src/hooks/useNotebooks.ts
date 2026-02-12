@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Notebook, NotebookMetadata, Page } from '../types'
+import { db } from '../db'
 
 const TOTAL_PAGES = 100
-const METADATA_KEY = 'toshiyuki-notebooks-metadata'
-const NOTEBOOK_PREFIX = 'toshiyuki-notebook-'
+// Old keys for migration
+const LEGACY_METADATA_KEY = 'toshiyuki-notebooks-metadata'
+const LEGACY_NOTEBOOK_PREFIX = 'toshiyuki-notebook-'
+const LEGACY_SINGLE_NOTE_KEY = 'toshiyuki-notebook-v1'
 
 const createNewNotebook = (title = '新しいノート'): Notebook => {
   const now = new Date().toISOString()
@@ -28,56 +31,78 @@ export const useNotebooks = () => {
   const [currentNotebook, setCurrentNotebook] = useState<Notebook | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Initialize: Load metadata list
-  useEffect(() => {
-    const savedMetadata = localStorage.getItem(METADATA_KEY)
-    if (savedMetadata) {
+  // Migration Logic
+  const migrateFromLocalStorage = async () => {
+    console.log('Checking for legacy data...')
+    
+    // 1. Check for v1.1 multiple notebooks metadata
+    const legacyMetaStr = localStorage.getItem(LEGACY_METADATA_KEY)
+    if (legacyMetaStr) {
       try {
-        const parsed = JSON.parse(savedMetadata)
-        setNotebooks(parsed)
-        // Load the first notebook or the last opened one?
-        // For simplicity, load the first one if exists
-        if (parsed.length > 0) {
-           loadNotebook(parsed[0].id)
-        } else {
-           // No notebooks, create one
-           createNotebook()
+        const metas: NotebookMetadata[] = JSON.parse(legacyMetaStr)
+        for (const meta of metas) {
+          const notebookStr = localStorage.getItem(`${LEGACY_NOTEBOOK_PREFIX}${meta.id}`)
+          if (notebookStr) {
+            const notebook: Notebook = JSON.parse(notebookStr)
+            await db.saveNotebook(notebook)
+            localStorage.removeItem(`${LEGACY_NOTEBOOK_PREFIX}${meta.id}`)
+          }
         }
+        localStorage.removeItem(LEGACY_METADATA_KEY)
+        console.log('Migrated multiple notebooks to IndexedDB')
       } catch (e) {
-        console.error('Failed to parse metadata', e)
-        createNotebook()
+        console.error('Migration failed (multiple)', e)
       }
-    } else {
-      createNotebook()
     }
-    setIsLoading(false)
+
+    // 2. Check for v1.0 single notebook
+    const legacySingleStr = localStorage.getItem(LEGACY_SINGLE_NOTE_KEY)
+    if (legacySingleStr) {
+      try {
+        const notebook: Notebook = JSON.parse(legacySingleStr)
+        // Ensure it has an ID
+        if (!notebook.id) notebook.id = uuidv4()
+        
+        await db.saveNotebook(notebook)
+        localStorage.removeItem(LEGACY_SINGLE_NOTE_KEY)
+        console.log('Migrated single notebook to IndexedDB')
+      } catch (e) {
+        console.error('Migration failed (single)', e)
+      }
+    }
+  }
+
+  // Initialize
+  useEffect(() => {
+    const init = async () => {
+      await migrateFromLocalStorage()
+      
+      const allMetadata = await db.getAllMetadata()
+      setNotebooks(allMetadata)
+
+      if (allMetadata.length > 0) {
+        // Load most recently modified
+        const notebook = await db.getNotebook(allMetadata[0].id)
+        if (notebook) {
+          setCurrentNotebook(notebook)
+        } else {
+          // Metadata exists but data missing?
+          await createNotebookInternal()
+        }
+      } else {
+        await createNotebookInternal()
+      }
+      
+      setIsLoading(false)
+    }
+
+    init()
   }, [])
 
-  const saveMetadata = (newNotebooks: NotebookMetadata[]) => {
-    localStorage.setItem(METADATA_KEY, JSON.stringify(newNotebooks))
-    setNotebooks(newNotebooks)
-  }
-
-  const saveCurrentNotebook = (notebook: Notebook) => {
-    localStorage.setItem(`${NOTEBOOK_PREFIX}${notebook.id}`, JSON.stringify(notebook))
-    setCurrentNotebook(notebook)
-
-    // Update metadata (title/lastModified might change)
-    const newMetadata = notebooks.map(n => 
-      n.id === notebook.id 
-        ? { ...n, title: notebook.title, lastModified: new Date().toISOString() } 
-        : n
-    )
-    saveMetadata(newMetadata)
-  }
-
-  const createNotebook = () => {
+  const createNotebookInternal = async () => {
     const newNotebook = createNewNotebook()
+    await db.saveNotebook(newNotebook)
     
-    // Save new notebook data
-    localStorage.setItem(`${NOTEBOOK_PREFIX}${newNotebook.id}`, JSON.stringify(newNotebook))
-    
-    // Add to metadata
     const newMeta: NotebookMetadata = {
       id: newNotebook.id,
       title: newNotebook.title,
@@ -85,30 +110,26 @@ export const useNotebooks = () => {
       lastModified: newNotebook.createdAt
     }
     
-    const newNotebooks = [newMeta, ...notebooks] // Add to top
-    saveMetadata(newNotebooks)
+    setNotebooks(prev => [newMeta, ...prev])
     setCurrentNotebook(newNotebook)
     return newNotebook
   }
 
-  const loadNotebook = (id: string) => {
-    const saved = localStorage.getItem(`${NOTEBOOK_PREFIX}${id}`)
-    if (saved) {
-      try {
-        const notebook = JSON.parse(saved)
-        setCurrentNotebook(notebook)
-      } catch (e) {
-        console.error('Failed to load notebook', id, e)
-        alert('ノートの読み込みに失敗しました。')
-      }
+  // Public Actions
+  const createNotebook = async () => {
+    await createNotebookInternal()
+  }
+
+  const loadNotebook = async (id: string) => {
+    const notebook = await db.getNotebook(id)
+    if (notebook) {
+      setCurrentNotebook(notebook)
     } else {
-       // If data is missing but metadata exists (rare case), remove metadata?
-       // For now, just alert.
-       alert('ノートデータが見つかりません。')
+      alert('ノートの読み込みに失敗しました。')
     }
   }
 
-  const deleteNotebook = (id: string) => {
+  const deleteNotebook = async (id: string) => {
     if (notebooks.length <= 1) {
       alert('最後の1冊は削除できません。')
       return
@@ -116,21 +137,30 @@ export const useNotebooks = () => {
     
     if (!confirm('このノートを削除しますか？\n(復元できません)')) return
 
-    // Remove data
-    localStorage.removeItem(`${NOTEBOOK_PREFIX}${id}`)
+    await db.deleteNotebook(id)
     
-    // Remove metadata
     const newNotebooks = notebooks.filter(n => n.id !== id)
-    saveMetadata(newNotebooks)
+    setNotebooks(newNotebooks)
 
-    // If current was deleted, switch to another
     if (currentNotebook?.id === id) {
+      // Switch to another
       loadNotebook(newNotebooks[0].id)
     }
   }
 
-  const updateNotebook = (notebook: Notebook) => {
-    saveCurrentNotebook(notebook)
+  const updateNotebook = async (notebook: Notebook) => {
+    // Optimistic UI update
+    setCurrentNotebook(notebook)
+    
+    // Background save
+    await db.saveNotebook(notebook)
+    
+    // Update metadata list if title changed
+    setNotebooks(prev => prev.map(n => 
+      n.id === notebook.id 
+        ? { ...n, title: notebook.title, lastModified: new Date().toISOString() }
+        : n
+    ))
   }
 
   return {

@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { useSwipeable } from 'react-swipeable'
+import { v4 as uuidv4 } from 'uuid'
 import { useNotebooks } from './hooks/useNotebooks'
-import { ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check, FileText, Search, X } from 'lucide-react'
+import type { Attachment } from './types'
+import { ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check, FileText, Search, X, Paperclip, MapPin } from 'lucide-react'
 import './styles/global.css'
 
 const TOTAL_PAGES = 50
@@ -21,14 +23,18 @@ function App() {
   } = useNotebooks()
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
   const [tempTitle, setTempTitle] = useState('')
   
   // Search State
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ notebookId: string; title: string; pageNumber: number; snippet: string }[]>([])
   const [isSearching, setIsSearching] = useState(false)
+
+  // Attachment State
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [previewImage, setPreviewImage] = useState<Attachment | null>(null)
 
   // Action: Page Change
   const handlePageChange = (newPage: number) => {
@@ -54,6 +60,64 @@ function App() {
     updateNotebook({ ...currentNotebook, pages: newPages })
   }
 
+  // Action: Add Attachment
+  const handleAddAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!currentNotebook || !e.target.files || e.target.files.length === 0) return
+    
+    const file = e.target.files[0]
+    const newAttachment: Attachment = {
+      id: uuidv4(),
+      type: 'image',
+      data: file, // Store Blob directly
+      name: file.name,
+      mimeType: file.type,
+      createdAt: new Date().toISOString()
+    }
+
+    const newPages = [...currentNotebook.pages]
+    const pageIndex = currentNotebook.currentPage - 1
+    const currentPage = newPages[pageIndex]
+    
+    const updatedAttachments = currentPage.attachments ? [...currentPage.attachments, newAttachment] : [newAttachment]
+    
+    newPages[pageIndex] = {
+      ...currentPage,
+      attachments: updatedAttachments,
+      lastModified: new Date().toISOString(),
+    }
+
+    await updateNotebook({ ...currentNotebook, pages: newPages })
+    
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!currentNotebook || !confirm('画像を削除しますか？')) return
+
+    const newPages = [...currentNotebook.pages]
+    const pageIndex = currentNotebook.currentPage - 1
+    const currentPage = newPages[pageIndex]
+    
+    if (!currentPage.attachments) return
+
+    const updatedAttachments = currentPage.attachments.filter(a => a.id !== attachmentId)
+    
+    newPages[pageIndex] = {
+      ...currentPage,
+      attachments: updatedAttachments,
+      lastModified: new Date().toISOString(),
+    }
+
+    await updateNotebook({ ...currentNotebook, pages: newPages })
+    setPreviewImage(null)
+  }
+
+  // Helper to create object URL for display
+  const getImageUrl = (data: Blob) => {
+    return URL.createObjectURL(data)
+  }
+
   // Action: Download
   const handleDownloadZip = async () => {
     if (!currentNotebook) return
@@ -62,12 +126,27 @@ function App() {
     let hasContent = false
 
     currentNotebook.pages.forEach((page) => {
+      // Text content
       if (page.content.trim()) {
         const date = new Date(page.lastModified)
         const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
         const filename = `${String(page.pageNumber).padStart(3, '0')}_${dateStr}.txt`
         zip.file(filename, page.content)
         hasContent = true
+      }
+      
+      // Attachments
+      if (page.attachments && page.attachments.length > 0) {
+         page.attachments.forEach((att, idx) => {
+           if (att.type === 'image' && att.data instanceof Blob) {
+             const date = new Date(page.lastModified)
+             const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
+             const ext = att.name ? att.name.split('.').pop() : 'png'
+             const filename = `images/${String(page.pageNumber).padStart(3, '0')}_${dateStr}_${idx + 1}.${ext}`
+             zip.file(filename, att.data)
+             hasContent = true
+           }
+         })
       }
     })
 
@@ -81,6 +160,7 @@ function App() {
     setIsMenuOpen(false)
   }
 
+  // ... (Other handlers unchanged)
   // Action: Create New
   const handleCreateNotebook = () => {
     createNotebook()
@@ -144,6 +224,7 @@ function App() {
 
   const currentPageData = currentNotebook.pages[currentNotebook.currentPage - 1]
   const isLastPage = currentNotebook.currentPage === TOTAL_PAGES
+  const attachments = currentPageData.attachments || []
 
   return (
     <div className="app-container">
@@ -176,7 +257,7 @@ function App() {
         </button>
       </header>
 
-      {/* Menu Overlay */}
+      {/* Menu & Search Overlay (Unchanged logic) */}
       {isMenuOpen && (
         <div className="menu-overlay" onClick={() => setIsMenuOpen(false)}>
           <div className="menu-content" onClick={(e) => e.stopPropagation()}>
@@ -217,13 +298,12 @@ function App() {
             </div>
             
             <div className="menu-footer">
-              <p>Ver 1.2.0 (Search Enabled)</p>
+              <p>Ver 1.3.0 (Attachments)</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Search Overlay */}
       {isSearchOpen && (
         <div className="search-overlay">
           <div className="search-header">
@@ -268,6 +348,19 @@ function App() {
           </div>
         </div>
       )}
+      
+      {/* Image Preview Overlay */}
+      {previewImage && (
+        <div className="preview-overlay" onClick={() => setPreviewImage(null)}>
+          <div className="preview-content" onClick={(e) => e.stopPropagation()}>
+             <img src={getImageUrl(previewImage.data as Blob)} alt="Preview" />
+             <button className="preview-close" onClick={() => setPreviewImage(null)}><X size={24} /></button>
+             <button className="preview-delete" onClick={() => handleDeleteAttachment(previewImage.id)}>
+               <Trash2 size={24} /> 削除
+             </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Editor */}
       <main className="editor-area" {...swipeHandlers}>
@@ -277,12 +370,43 @@ function App() {
           placeholder={`Page ${currentNotebook.currentPage}`}
           spellCheck={false}
         />
+        
+        {/* Attachments Area */}
+        {attachments.length > 0 && (
+          <div className="attachments-area">
+            {attachments.map(att => (
+              <div key={att.id} className="attachment-item" onClick={() => setPreviewImage(att)}>
+                {att.type === 'image' && (
+                  <img src={getImageUrl(att.data as Blob)} alt="attachment" className="attachment-thumb" />
+                )}
+                {/* Future support for other types */}
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
       {/* Footer Navigation */}
       <footer className="footer">
-        <div className="page-indicator-footer">
-          {currentNotebook.currentPage} / {TOTAL_PAGES}
+        <div className="footer-left">
+           <div className="page-indicator-footer">
+             {currentNotebook.currentPage} / {TOTAL_PAGES}
+           </div>
+        </div>
+
+        <div className="footer-center">
+           <input 
+             type="file" 
+             ref={fileInputRef} 
+             style={{ display: 'none' }} 
+             accept="image/*"
+             onChange={handleAddAttachment}
+           />
+           <button className="icon-btn" onClick={() => fileInputRef.current?.click()}>
+             <Paperclip size={20} />
+           </button>
+           {/* Placeholder for Location */}
+           {/* <button className="icon-btn disabled"><MapPin size={20} /></button> */}
         </div>
 
         <div className="nav-buttons">

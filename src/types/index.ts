@@ -1,7 +1,17 @@
+export interface Attachment {
+  id: string;
+  type: 'image' | 'file' | 'location';
+  data: Blob | string | object; // Blob for files, string/object for others
+  name?: string; // filename
+  mimeType?: string;
+  createdAt: string;
+}
+
 export interface Page {
   pageNumber: number;
   content: string;
   lastModified: string; // ISO 8601
+  attachments?: Attachment[]; // Optional for backward compatibility
 }
 
 export interface NotebookMetadata {

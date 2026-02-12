@@ -29,7 +29,7 @@ function App() {
     deleteNotebook,
     updateNotebook,
     searchNotebooks,
-    getAllFullNotebooks
+    getCalendarData
   } = useNotebooks()
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -386,7 +386,7 @@ function App() {
       <CalendarOverlay 
         isOpen={isCalendarOpen}
         onClose={() => setIsCalendarOpen(false)}
-        fetchNotebooks={getAllFullNotebooks}
+        fetchNotebooks={getCalendarData}
         onJumpToPage={handleCalendarJump}
       />
 

@@ -177,28 +177,101 @@ export const useNotebooks = () => {
     
     
     
-          const searchNotebooks = async (query: string) => {
-            return await db.searchAllNotebooks(query)
-          }
-        
-          const getAllFullNotebooks = useCallback(async () => {
-            const fullNotebooks: Notebook[] = []
-            for (const meta of notebooks) {
-              const nb = await db.getNotebook(meta.id)
-              if (nb) fullNotebooks.push(nb)
+            const searchNotebooks = async (query: string) => {
+    
+    
+    
+              return await db.searchAllNotebooks(query)
+    
+    
+    
             }
-            return fullNotebooks
-          }, [notebooks])
-        
-          return {          notebooks,
-          currentNotebook,
-          isLoading,
-          createNotebook,
-          loadNotebook,
-          deleteNotebook,
-          updateNotebook,
-          searchNotebooks,
-          getAllFullNotebooks
-        }
-      }    
+    
+    
+    
+          
+    
+    
+    
+            const getCalendarData = useCallback(async () => {
+    
+    
+    
+              try {
+    
+    
+    
+                return await db.getNotebooksForCalendar()
+    
+    
+    
+              } catch (e) {
+    
+    
+    
+                console.error('Failed to get calendar data', e)
+    
+    
+    
+                return []
+    
+    
+    
+              }
+    
+    
+    
+            }, [])
+    
+    
+    
+          
+    
+    
+    
+            return {
+    
+    
+    
+              notebooks,
+    
+    
+    
+              currentNotebook,
+    
+    
+    
+              isLoading,
+    
+    
+    
+              createNotebook,
+    
+    
+    
+              loadNotebook,
+    
+    
+    
+              deleteNotebook,
+    
+    
+    
+              updateNotebook,
+    
+    
+    
+              searchNotebooks,
+    
+    
+    
+              getCalendarData
+    
+    
+    
+            }
+    
+    
+    
+          }    
     

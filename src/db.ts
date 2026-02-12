@@ -70,6 +70,35 @@ export const db = {
     await db.put('metadata', metadata)
   },
 
+  async getNotebooksForCalendar(): Promise<Notebook[]> {
+    const db = await initDB()
+    const tx = db.transaction('notebooks', 'readonly')
+    const store = tx.objectStore('notebooks')
+    
+    const lightNotebooks: Notebook[] = []
+    let cursor = await store.openCursor()
+    
+    while (cursor) {
+      const nb = cursor.value
+      // Create a lightweight copy
+      const lightNb: any = {
+        id: nb.id,
+        title: nb.title,
+        pages: nb.pages.map((p: any) => ({
+          pageNumber: p.pageNumber,
+          lastModified: p.lastModified,
+          // We only need to know if content/attachments exist
+          content: p.content && p.content.length > 0 ? 'exists' : '',
+          attachments: p.attachments && p.attachments.length > 0 ? [{ id: 'dummy', type: 'image', data: '', createdAt: '' }] : []
+        }))
+      }
+      lightNotebooks.push(lightNb)
+      cursor = await cursor.continue()
+    }
+    
+    return lightNotebooks
+  },
+
   async deleteNotebook(id: string): Promise<void> {
     const db = await initDB()
     const tx = db.transaction(['notebooks', 'metadata'], 'readwrite')

@@ -24,15 +24,21 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   useEffect(() => {
     if (isOpen && !hasFetched) {
       setIsLoading(true)
-      fetchNotebooks().then(data => {
-        setAllNotebooks(data)
-        setIsLoading(false)
-        setHasFetched(true)
-      })
+      fetchNotebooks()
+        .then(data => {
+          setAllNotebooks(data)
+          setIsLoading(false)
+          setHasFetched(true)
+        })
+        .catch(err => {
+          console.error('Failed to fetch notebooks for calendar:', err)
+          setIsLoading(false)
+        })
     } else if (!isOpen) {
         setHasFetched(false) // Reset on close so it fetches again next time
     }
-  }, [isOpen, hasFetched, fetchNotebooks])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, hasFetched])
 
   if (!isOpen) return null
 
@@ -48,20 +54,32 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   const activityMap = useMemo(() => {
     const map: Record<string, Array<{ notebook: Notebook, pageNumber: number, time: string }>> = {}
 
+    if (!Array.isArray(allNotebooks)) return map
+
     allNotebooks.forEach(notebook => {
+      if (!notebook || !Array.isArray(notebook.pages)) return
+
       notebook.pages.forEach(page => {
-        const hasContent = page.content.trim().length > 0 || (page.attachments && page.attachments.length > 0)
+        if (!page) return
+        
+        const hasContent = (page.content && page.content.trim().length > 0) || (page.attachments && page.attachments.length > 0)
         
         if (hasContent && page.lastModified) {
-          const date = new Date(page.lastModified)
-          const key = formatDateKey(date)
-          
-          if (!map[key]) map[key] = []
-          map[key].push({
-            notebook,
-            pageNumber: page.pageNumber,
-            time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          })
+          try {
+            const date = new Date(page.lastModified)
+            if (isNaN(date.getTime())) return // Skip invalid dates
+
+            const key = formatDateKey(date)
+            
+            if (!map[key]) map[key] = []
+            map[key].push({
+              notebook,
+              pageNumber: page.pageNumber,
+              time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            })
+          } catch (e) {
+            console.error('Error processing page date:', e)
+          }
         }
       })
     })

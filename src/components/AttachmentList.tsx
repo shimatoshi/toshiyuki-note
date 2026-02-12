@@ -1,6 +1,6 @@
 import React from 'react'
 import type { Attachment } from '../types'
-import { File } from 'lucide-react'
+import { File, MapPin } from 'lucide-react'
 
 interface AttachmentListProps {
   attachments: Attachment[]
@@ -23,6 +23,12 @@ export const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, onP
               <img src={getImageUrl(att.data as Blob)} alt="attachment" className="attachment-thumb" />
               <span className="attachment-badge">{idx + 1}</span>
             </>
+          ) : att.type === 'location' ? (
+            <div className="attachment-file">
+              <MapPin size={32} />
+              <span className="attachment-filename">Location</span>
+              <span className="attachment-badge">{idx + 1}</span>
+            </div>
           ) : (
             <div className="attachment-file">
               <File size={32} />

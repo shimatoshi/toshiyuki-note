@@ -157,6 +157,61 @@ function App() {
     updateNotebook({ ...currentNotebook, pages: newPages })
   }
 
+  const handleAddLocation = () => {
+    if (!currentNotebook) return
+    if (!navigator.geolocation) {
+      alert('この端末は位置情報に対応していません。')
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude, accuracy } = position.coords
+        
+        const newAttachment: Attachment = {
+          id: uuidv4(),
+          type: 'location',
+          data: { latitude, longitude, accuracy },
+          name: `Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+          createdAt: new Date().toISOString()
+        }
+
+        const newPages = [...currentNotebook.pages]
+        const pageIndex = currentNotebook.currentPage - 1
+        const currentPage = newPages[pageIndex]
+        
+        const updatedAttachments = currentPage.attachments ? [...currentPage.attachments, newAttachment] : [newAttachment]
+        const attachmentNumber = updatedAttachments.length
+
+        let newContent = currentPage.content
+        const locationStr = ` (現在地${attachmentNumber}) `
+        
+        const textarea = textareaRef.current
+        if (textarea) {
+          const start = textarea.selectionStart
+          const end = textarea.selectionEnd
+          newContent = newContent.substring(0, start) + locationStr + newContent.substring(end)
+        } else {
+          newContent += `\n${locationStr}`
+        }
+
+        newPages[pageIndex] = {
+          ...currentPage,
+          content: newContent,
+          attachments: updatedAttachments,
+          lastModified: new Date().toISOString(),
+        }
+
+        await updateNotebook({ ...currentNotebook, pages: newPages })
+      },
+      (error) => {
+        console.error('Geolocation error', error)
+        alert('位置情報の取得に失敗しました。')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
+
   const handleDeleteAttachment = async (attachmentId: string) => {
     if (!currentNotebook || !confirm('画像を削除しますか？\n(本文中の参照テキストは手動で消してください)')) return
 
@@ -327,6 +382,7 @@ function App() {
         onNextPage={handleNextPage}
         onAddAttachment={handleAddAttachment}
         onAddTimestamp={handleAddTimestamp}
+        onAddLocation={handleAddLocation}
         isNextDisabled={isLastPage && !currentPageData.content}
       />
     </div>

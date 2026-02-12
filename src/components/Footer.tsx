@@ -8,6 +8,7 @@ interface FooterProps {
   onNextPage: () => void
   onAddAttachment: (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => void
   onAddTimestamp: () => void
+  onAddLocation: () => void
   isNextDisabled: boolean
 }
 
@@ -18,6 +19,7 @@ export const Footer: React.FC<FooterProps> = ({
   onNextPage,
   onAddAttachment,
   onAddTimestamp,
+  onAddLocation,
   isNextDisabled
 }) => {
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -63,8 +65,9 @@ export const Footer: React.FC<FooterProps> = ({
            <Clock size={20} />
          </button>
          
-         {/* Placeholder for Location */}
-         {/* <button className="icon-btn disabled"><MapPin size={20} /></button> */}
+         <button className="icon-btn" onClick={onAddLocation}>
+           <MapPin size={20} />
+         </button>
       </div>
 
       <div className="nav-buttons">

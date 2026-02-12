@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Notebook, NotebookMetadata, Page } from '../types'
 import { db } from '../db'
@@ -177,21 +177,20 @@ export const useNotebooks = () => {
     
     
     
-        const searchNotebooks = async (query: string) => {
-          return await db.searchAllNotebooks(query)
-        }
-      
-        const getAllFullNotebooks = async () => {
-          const fullNotebooks: Notebook[] = []
-          for (const meta of notebooks) {
-            const nb = await db.getNotebook(meta.id)
-            if (nb) fullNotebooks.push(nb)
+          const searchNotebooks = async (query: string) => {
+            return await db.searchAllNotebooks(query)
           }
-          return fullNotebooks
-        }
-      
-        return {
-          notebooks,
+        
+          const getAllFullNotebooks = useCallback(async () => {
+            const fullNotebooks: Notebook[] = []
+            for (const meta of notebooks) {
+              const nb = await db.getNotebook(meta.id)
+              if (nb) fullNotebooks.push(nb)
+            }
+            return fullNotebooks
+          }, [notebooks])
+        
+          return {          notebooks,
           currentNotebook,
           isLoading,
           createNotebook,

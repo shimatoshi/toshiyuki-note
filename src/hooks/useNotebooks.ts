@@ -120,9 +120,15 @@ export const useNotebooks = () => {
     await createNotebookInternal()
   }
 
-  const loadNotebook = async (id: string) => {
+  const loadNotebook = async (id: string, targetPage?: number) => {
     const notebook = await db.getNotebook(id)
     if (notebook) {
+      if (targetPage) {
+        notebook.currentPage = targetPage
+        // Don't save this page change to DB immediately to avoid history pollution? 
+        // Or yes, save it as "last opened page".
+        await db.saveNotebook(notebook)
+      }
       setCurrentNotebook(notebook)
     } else {
       alert('ノートの読み込みに失敗しました。')
@@ -155,21 +161,50 @@ export const useNotebooks = () => {
     // Background save
     await db.saveNotebook(notebook)
     
-    // Update metadata list if title changed
-    setNotebooks(prev => prev.map(n => 
-      n.id === notebook.id 
-        ? { ...n, title: notebook.title, lastModified: new Date().toISOString() }
-        : n
-    ))
-  }
-
-  return {
-    notebooks,
-    currentNotebook,
-    isLoading,
-    createNotebook,
-    loadNotebook,
-    deleteNotebook,
-    updateNotebook
-  }
-}
+        // Update metadata list if title changed
+    
+        setNotebooks(prev => prev.map(n => 
+    
+          n.id === notebook.id 
+    
+            ? { ...n, title: notebook.title, lastModified: new Date().toISOString() }
+    
+            : n
+    
+        ))
+    
+      }
+    
+    
+    
+      const searchNotebooks = async (query: string) => {
+    
+        return await db.searchAllNotebooks(query)
+    
+      }
+    
+    
+    
+      return {
+    
+        notebooks,
+    
+        currentNotebook,
+    
+        isLoading,
+    
+        createNotebook,
+    
+        loadNotebook,
+    
+        deleteNotebook,
+    
+        updateNotebook,
+    
+        searchNotebooks
+    
+      }
+    
+    }
+    
+    

@@ -76,5 +76,32 @@ export const db = {
     await tx.objectStore('notebooks').delete(id)
     await tx.objectStore('metadata').delete(id)
     await tx.done
+  },
+
+  async searchAllNotebooks(query: string): Promise<{ notebookId: string; title: string; pageNumber: number; snippet: string }[]> {
+    if (!query.trim()) return []
+    const db = await initDB()
+    const notebooks = await db.getAll('notebooks')
+    const results: { notebookId: string; title: string; pageNumber: number; snippet: string }[] = []
+
+    for (const notebook of notebooks) {
+      for (const page of notebook.pages) {
+        if (page.content.includes(query)) {
+          // Extract snippet
+          const index = page.content.indexOf(query)
+          const start = Math.max(0, index - 20)
+          const end = Math.min(page.content.length, index + query.length + 20)
+          const snippet = (start > 0 ? '...' : '') + page.content.slice(start, end) + (end < page.content.length ? '...' : '')
+          
+          results.push({
+            notebookId: notebook.id,
+            title: notebook.title,
+            pageNumber: page.pageNumber,
+            snippet
+          })
+        }
+      }
+    }
+    return results
   }
 }

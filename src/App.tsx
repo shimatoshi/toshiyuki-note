@@ -3,7 +3,7 @@ import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { useSwipeable } from 'react-swipeable'
 import { useNotebooks } from './hooks/useNotebooks'
-import { ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check, FileText, Search, X } from 'lucide-react'
 import './styles/global.css'
 
 const TOTAL_PAGES = 100
@@ -16,12 +16,19 @@ function App() {
     createNotebook, 
     loadNotebook, 
     deleteNotebook,
-    updateNotebook 
+    updateNotebook,
+    searchNotebooks
   } = useNotebooks()
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
   const [tempTitle, setTempTitle] = useState('')
+  
+  // Search State
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<{ notebookId: string; title: string; pageNumber: number; snippet: string }[]>([])
+  const [isSearching, setIsSearching] = useState(false)
 
   // Action: Page Change
   const handlePageChange = (newPage: number) => {
@@ -93,6 +100,28 @@ function App() {
     setIsRenaming(false)
   }
 
+  // Action: Search
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!searchQuery.trim()) return
+    
+    setIsSearching(true)
+    const results = await searchNotebooks(searchQuery)
+    setSearchResults(results)
+    setIsSearching(false)
+  }
+
+  const handleJumpToResult = (notebookId: string, pageNumber: number) => {
+    if (currentNotebook && currentNotebook.id === notebookId) {
+       handlePageChange(pageNumber)
+    } else {
+       loadNotebook(notebookId, pageNumber)
+    }
+    setIsSearchOpen(false)
+    setSearchQuery('')
+    setSearchResults([])
+  }
+
   // Swipe Handlers
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
@@ -142,11 +171,9 @@ function App() {
           )}
         </div>
 
-        <div className="page-indicator">
-          <span>{currentNotebook.currentPage}</span>
-          <span className="divider">/</span>
-          <span>{TOTAL_PAGES}</span>
-        </div>
+        <button className="icon-btn" onClick={() => setIsSearchOpen(true)}>
+          <Search size={24} />
+        </button>
       </header>
 
       {/* Menu Overlay */}
@@ -190,8 +217,54 @@ function App() {
             </div>
             
             <div className="menu-footer">
-              <p>Ver 1.1.0 (Multiple Notebooks)</p>
+              <p>Ver 1.2.0 (Search Enabled)</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Overlay */}
+      {isSearchOpen && (
+        <div className="search-overlay">
+          <div className="search-header">
+            <form onSubmit={handleSearch} className="search-bar">
+              <Search size={20} className="search-icon" />
+              <input 
+                type="text" 
+                placeholder="全ノート検索..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {searchQuery && (
+                <button type="button" className="clear-btn" onClick={() => setSearchQuery('')}>
+                  <X size={16} />
+                </button>
+              )}
+            </form>
+            <button className="close-btn" onClick={() => setIsSearchOpen(false)}>
+              キャンセル
+            </button>
+          </div>
+          
+          <div className="search-results">
+            {isSearching ? (
+              <div className="searching-indicator">検索中...</div>
+            ) : searchResults.length > 0 ? (
+              <ul>
+                {searchResults.map((result, idx) => (
+                  <li key={`${result.notebookId}-${result.pageNumber}-${idx}`} onClick={() => handleJumpToResult(result.notebookId, result.pageNumber)}>
+                    <div className="result-meta">
+                      <span className="result-title">{result.title}</span>
+                      <span className="result-page">P.{result.pageNumber}</span>
+                    </div>
+                    <div className="result-snippet">{result.snippet}</div>
+                  </li>
+                ))}
+              </ul>
+            ) : searchQuery && !isSearching ? (
+               <div className="no-results">見つかりませんでした</div>
+            ) : null}
           </div>
         </div>
       )}
@@ -208,29 +281,33 @@ function App() {
 
       {/* Footer Navigation */}
       <footer className="footer">
-        <button 
-          className="nav-btn" 
-          disabled={currentNotebook.currentPage === 1}
-          onClick={() => handlePageChange(currentNotebook.currentPage - 1)}
-        >
-          <ChevronLeft size={24} />
-          <span>前へ</span>
-        </button>
-        
-        <button 
-          className="nav-btn"
-          disabled={isLastPage && !currentPageData.content} 
-          onClick={() => {
-            if (isLastPage) {
-              alert('最後のページです。メニューから保存して新しいノートを作成してください。')
-            } else {
-              handlePageChange(currentNotebook.currentPage + 1)
-            }
-          }}
-        >
-          <span>次へ</span>
-          <ChevronRight size={24} />
-        </button>
+        <div className="page-indicator-footer">
+          {currentNotebook.currentPage} / {TOTAL_PAGES}
+        </div>
+
+        <div className="nav-buttons">
+          <button 
+            className="nav-btn" 
+            disabled={currentNotebook.currentPage === 1}
+            onClick={() => handlePageChange(currentNotebook.currentPage - 1)}
+          >
+            <ChevronLeft size={24} />
+          </button>
+          
+          <button 
+            className="nav-btn"
+            disabled={isLastPage && !currentPageData.content} 
+            onClick={() => {
+              if (isLastPage) {
+                alert('最後のページです。メニューから保存して新しいノートを作成してください。')
+              } else {
+                handlePageChange(currentNotebook.currentPage + 1)
+              }
+            }}
+          >
+            <ChevronRight size={24} />
+          </button>
+        </div>
       </footer>
     </div>
   )

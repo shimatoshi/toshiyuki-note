@@ -80,13 +80,13 @@ function App() {
   }
 
   // Action: Add Attachment
-  const handleAddAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddAttachment = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => {
     if (!currentNotebook || !e.target.files || e.target.files.length === 0) return
     
     const file = e.target.files[0]
     const newAttachment: Attachment = {
       id: uuidv4(),
-      type: 'image',
+      type: type,
       data: file, // Store Blob directly
       name: file.name,
       mimeType: file.type,
@@ -106,10 +106,12 @@ function App() {
     if (textarea) {
       const start = textarea.selectionStart
       const end = textarea.selectionEnd
-      const textToInsert = ` (画像${attachmentNumber}) `
+      const tagLabel = type === 'image' ? '画像' : 'ファイル'
+      const textToInsert = ` (${tagLabel}${attachmentNumber}) `
       newContent = newContent.substring(0, start) + textToInsert + newContent.substring(end)
     } else {
-       newContent += `\n(画像${attachmentNumber})`
+       const tagLabel = type === 'image' ? '画像' : 'ファイル'
+       newContent += `\n(${tagLabel}${attachmentNumber})`
     }
     
     newPages[pageIndex] = {

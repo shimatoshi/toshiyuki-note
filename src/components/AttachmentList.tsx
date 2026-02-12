@@ -1,5 +1,6 @@
 import React from 'react'
 import type { Attachment } from '../types'
+import { File } from 'lucide-react'
 
 interface AttachmentListProps {
   attachments: Attachment[]
@@ -17,13 +18,18 @@ export const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, onP
     <div className="attachments-area">
       {attachments.map((att, idx) => (
         <div key={att.id} className="attachment-item" onClick={() => onPreview(att)}>
-          {att.type === 'image' && (
+          {att.type === 'image' ? (
             <>
               <img src={getImageUrl(att.data as Blob)} alt="attachment" className="attachment-thumb" />
               <span className="attachment-badge">{idx + 1}</span>
             </>
+          ) : (
+            <div className="attachment-file">
+              <File size={32} />
+              <span className="attachment-filename">{att.name}</span>
+              <span className="attachment-badge">{idx + 1}</span>
+            </div>
           )}
-          {/* Future support for other types */}
         </div>
       ))}
     </div>

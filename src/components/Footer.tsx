@@ -1,12 +1,12 @@
 import React, { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Paperclip, MapPin } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Paperclip, MapPin, FileUp } from 'lucide-react'
 
 interface FooterProps {
   currentPage: number
   totalPages: number
   onPrevPage: () => void
   onNextPage: () => void
-  onAddAttachment: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onAddAttachment: (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => void
   isNextDisabled: boolean
 }
 
@@ -18,6 +18,7 @@ export const Footer: React.FC<FooterProps> = ({
   onAddAttachment,
   isNextDisabled
 }) => {
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   return (
@@ -31,17 +32,31 @@ export const Footer: React.FC<FooterProps> = ({
       <div className="footer-center">
          <input 
            type="file" 
-           ref={fileInputRef} 
-           style={{ display: 'none' }} 
+           ref={imageInputRef} 
+           style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
            accept="image/*"
            onChange={(e) => {
-             onAddAttachment(e)
+             onAddAttachment(e, 'image')
+             if (imageInputRef.current) imageInputRef.current.value = ''
+           }}
+         />
+         <button className="icon-btn" onClick={() => imageInputRef.current?.click()}>
+           <Paperclip size={20} />
+         </button>
+
+         <input 
+           type="file" 
+           ref={fileInputRef} 
+           style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+           onChange={(e) => {
+             onAddAttachment(e, 'file')
              if (fileInputRef.current) fileInputRef.current.value = ''
            }}
          />
          <button className="icon-btn" onClick={() => fileInputRef.current?.click()}>
-           <Paperclip size={20} />
+           <FileUp size={20} />
          </button>
+         
          {/* Placeholder for Location */}
          {/* <button className="icon-btn disabled"><MapPin size={20} /></button> */}
       </div>

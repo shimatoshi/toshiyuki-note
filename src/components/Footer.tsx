@@ -1,5 +1,5 @@
 import React, { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Paperclip, MapPin, FileUp } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Paperclip, MapPin, FileUp, Clock } from 'lucide-react'
 
 interface FooterProps {
   currentPage: number
@@ -7,6 +7,7 @@ interface FooterProps {
   onPrevPage: () => void
   onNextPage: () => void
   onAddAttachment: (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => void
+  onAddTimestamp: () => void
   isNextDisabled: boolean
 }
 
@@ -16,6 +17,7 @@ export const Footer: React.FC<FooterProps> = ({
   onPrevPage,
   onNextPage,
   onAddAttachment,
+  onAddTimestamp,
   isNextDisabled
 }) => {
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -55,6 +57,10 @@ export const Footer: React.FC<FooterProps> = ({
          />
          <button className="icon-btn" onClick={() => fileInputRef.current?.click()}>
            <FileUp size={20} />
+         </button>
+
+         <button className="icon-btn" onClick={onAddTimestamp}>
+           <Clock size={20} />
          </button>
          
          {/* Placeholder for Location */}

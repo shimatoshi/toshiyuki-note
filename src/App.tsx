@@ -124,6 +124,39 @@ function App() {
     await updateNotebook({ ...currentNotebook, pages: newPages })
   }
 
+  const handleAddTimestamp = () => {
+    if (!currentNotebook) return
+    const now = new Date()
+    const Y = now.getFullYear()
+    const M = String(now.getMonth() + 1).padStart(2, '0')
+    const D = String(now.getDate()).padStart(2, '0')
+    const h = String(now.getHours()).padStart(2, '0')
+    const m = String(now.getMinutes()).padStart(2, '0')
+    const timeStr = `[${Y}/${M}/${D} ${h}:${m}]`
+    
+    const newPages = [...currentNotebook.pages]
+    const pageIndex = currentNotebook.currentPage - 1
+    const currentPage = newPages[pageIndex]
+
+    let newContent = currentPage.content
+    const textarea = textareaRef.current
+    if (textarea) {
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      newContent = newContent.substring(0, start) + timeStr + newContent.substring(end)
+    } else {
+      newContent += timeStr
+    }
+
+    newPages[pageIndex] = {
+      ...currentPage,
+      content: newContent,
+      lastModified: new Date().toISOString(),
+    }
+
+    updateNotebook({ ...currentNotebook, pages: newPages })
+  }
+
   const handleDeleteAttachment = async (attachmentId: string) => {
     if (!currentNotebook || !confirm('画像を削除しますか？\n(本文中の参照テキストは手動で消してください)')) return
 
@@ -293,6 +326,7 @@ function App() {
         onPrevPage={() => handlePageChange(currentNotebook.currentPage - 1)}
         onNextPage={handleNextPage}
         onAddAttachment={handleAddAttachment}
+        onAddTimestamp={handleAddTimestamp}
         isNextDisabled={isLastPage && !currentPageData.content}
       />
     </div>

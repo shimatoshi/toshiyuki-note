@@ -4,6 +4,7 @@ import { saveAs } from 'file-saver'
 import { useSwipeable } from 'react-swipeable'
 import { v4 as uuidv4 } from 'uuid'
 import { useNotebooks } from './hooks/useNotebooks'
+import { reverseGeocode, formatAddress } from './utils/geocoding'
 import type { Attachment } from './types'
 import './styles/global.css'
 
@@ -168,11 +169,27 @@ function App() {
       async (position) => {
         const { latitude, longitude, accuracy } = position.coords
         
+        let addressStr = `Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+        let addressData = null
+
+        try {
+          const addressInfo = await reverseGeocode(latitude, longitude)
+          if (addressInfo) {
+            const formatted = formatAddress(addressInfo)
+            if (formatted) {
+               addressStr = formatted
+            }
+            addressData = addressInfo
+          }
+        } catch (e) {
+          console.error('Address lookup failed', e)
+        }
+        
         const newAttachment: Attachment = {
           id: uuidv4(),
           type: 'location',
-          data: { latitude, longitude, accuracy },
-          name: `Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+          data: { latitude, longitude, accuracy, address: addressData },
+          name: addressStr,
           createdAt: new Date().toISOString()
         }
 

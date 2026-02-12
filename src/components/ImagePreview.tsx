@@ -22,12 +22,13 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ attachment, onClose,
       const { latitude, longitude } = attachment.data as any
       const mapUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
       return (
-        <div style={{ color: '#fff', textAlign: 'center' }}>
+        <div style={{ color: '#fff', textAlign: 'center', padding: '0 20px' }}>
           <MapPin size={64} style={{ marginBottom: 16 }} />
-          <h3>位置情報</h3>
-          <p>Lat: {latitude}</p>
-          <p>Lng: {longitude}</p>
-          <a href={mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#bb86fc', display: 'block', marginTop: 16 }}>
+          <h3 style={{ marginBottom: 8 }}>{attachment.name}</h3>
+          <p style={{ fontSize: '0.9em', opacity: 0.8, marginBottom: 4 }}>Lat: {latitude}</p>
+          <p style={{ fontSize: '0.9em', opacity: 0.8 }}>Lng: {longitude}</p>
+          
+          <a href={mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#bb86fc', display: 'block', marginTop: 24, fontSize: '1.1em', fontWeight: 'bold' }}>
             Google Mapsで開く
           </a>
         </div>

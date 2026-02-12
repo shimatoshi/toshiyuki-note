@@ -6,7 +6,7 @@ import { useNotebooks } from './hooks/useNotebooks'
 import { ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check, FileText, Search, X } from 'lucide-react'
 import './styles/global.css'
 
-const TOTAL_PAGES = 100
+const TOTAL_PAGES = 50
 
 function App() {
   const { 

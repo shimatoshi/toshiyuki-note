@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Notebook, NotebookMetadata, Page } from '../types'
 import { db } from '../db'
 
-const TOTAL_PAGES = 100
+const TOTAL_PAGES = 50
 // Old keys for migration
 const LEGACY_METADATA_KEY = 'toshiyuki-notebooks-metadata'
 const LEGACY_NOTEBOOK_PREFIX = 'toshiyuki-notebook-'

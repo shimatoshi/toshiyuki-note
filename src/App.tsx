@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
+import { useSwipeable } from 'react-swipeable'
 import type { Notebook, Page } from './types'
 import { BookOpen, ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check } from 'lucide-react'
 import './styles/global.css'
@@ -136,6 +137,26 @@ function App() {
     setIsRenaming(false)
   }
 
+  // --------------------------------------------------------------------
+  // Swipe Handlers
+  // --------------------------------------------------------------------
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (notebook && notebook.currentPage < TOTAL_PAGES) {
+         handlePageChange(notebook.currentPage + 1)
+      } else if (notebook && notebook.currentPage === TOTAL_PAGES) {
+         alert('最後のページです。メニューから保存して新しいノートを作成してください。')
+      }
+    },
+    onSwipedRight: () => {
+      if (notebook && notebook.currentPage > 1) {
+        handlePageChange(notebook.currentPage - 1)
+      }
+    },
+    preventScrollOnSwipe: true,
+    trackMouse: false
+  })
+
   if (!notebook) return <div className="loading">Loading...</div>
 
   const currentPageData = notebook.pages[notebook.currentPage - 1]
@@ -193,7 +214,7 @@ function App() {
       )}
 
       {/* Main Editor */}
-      <main className="editor-area">
+      <main className="editor-area" {...swipeHandlers}>
         <textarea
           value={currentPageData.content}
           onChange={(e) => handleContentChange(e.target.value)}

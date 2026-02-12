@@ -1,44 +1,22 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo } from 'react'
 import { X, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import type { Notebook } from '../types'
 
 interface CalendarOverlayProps {
   isOpen: boolean
   onClose: () => void
-  fetchNotebooks: () => Promise<Notebook[]>
+  notebooks: Notebook[]
   onJumpToPage: (notebookId: string, pageNumber: number) => void
 }
 
 export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({ 
   isOpen, 
   onClose, 
-  fetchNotebooks,
+  notebooks,
   onJumpToPage
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [allNotebooks, setAllNotebooks] = useState<Notebook[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [hasFetched, setHasFetched] = useState(false)
-
-  useEffect(() => {
-    if (isOpen && !hasFetched) {
-      setIsLoading(true)
-      fetchNotebooks()
-        .then(data => {
-          setAllNotebooks(data)
-          setIsLoading(false)
-          setHasFetched(true)
-        })
-        .catch(err => {
-          console.error('Failed to fetch notebooks for calendar:', err)
-          setIsLoading(false)
-        })
-    } else if (!isOpen) {
-        setHasFetched(false) // Reset on close so it fetches again next time
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, hasFetched])
 
   if (!isOpen) return null
 
@@ -54,9 +32,9 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   const activityMap = useMemo(() => {
     const map: Record<string, Array<{ notebook: Notebook, pageNumber: number, time: string }>> = {}
 
-    if (!Array.isArray(allNotebooks)) return map
+    if (!Array.isArray(notebooks)) return map
 
-    allNotebooks.forEach(notebook => {
+    notebooks.forEach(notebook => {
       if (!notebook || !Array.isArray(notebook.pages)) return
 
       notebook.pages.forEach(page => {
@@ -84,7 +62,7 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
       })
     })
     return map
-  }, [allNotebooks])
+  }, [notebooks])
 
   // Calendar Logic
   const year = currentDate.getFullYear()
@@ -131,15 +109,11 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
           <button className="icon-btn" onClick={onClose}><X size={24} /></button>
         </div>
 
-        {isLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px' }}>読み込み中...</div>
-        ) : (
-          <>
-            <div className="calendar-controls">
-              <button className="icon-btn" onClick={handlePrevMonth}><ChevronLeft /></button>
-              <span>{year}年 {month + 1}月</span>
-              <button className="icon-btn" onClick={handleNextMonth}><ChevronRight /></button>
-            </div>
+        <div className="calendar-controls">
+          <button className="icon-btn" onClick={handlePrevMonth}><ChevronLeft /></button>
+          <span>{year}年 {month + 1}月</span>
+          <button className="icon-btn" onClick={handleNextMonth}><ChevronRight /></button>
+        </div>
 
             <div className="calendar-grid-header">
               <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
@@ -190,8 +164,6 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
                 </div>
               </div>
             )}
-          </>
-        )}
       </div>
     </div>
   )

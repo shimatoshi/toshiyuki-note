@@ -35,6 +35,7 @@ function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const [calendarData, setCalendarData] = useState<any[]>([])
   
   // Search State
   const [searchQuery, setSearchQuery] = useState('')
@@ -312,6 +313,18 @@ function App() {
     setIsSearching(false)
   }
 
+  const handleOpenCalendar = async () => {
+    // Fetch data first, then open
+    try {
+      const data = await getCalendarData()
+      setCalendarData(data)
+      setIsCalendarOpen(true)
+    } catch (e) {
+      console.error('Failed to open calendar', e)
+      alert('カレンダーの読み込みに失敗しました。')
+    }
+  }
+
   const handleJumpToResult = (notebookId: string, pageNumber: number) => {
     if (currentNotebook && currentNotebook.id === notebookId) {
        handlePageChange(pageNumber)
@@ -356,7 +369,7 @@ function App() {
         title={currentNotebook.title}
         onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
         onToggleSearch={() => setIsSearchOpen(true)}
-        onToggleCalendar={() => setIsCalendarOpen(true)}
+        onToggleCalendar={handleOpenCalendar}
         onRename={handleRename}
       />
 
@@ -386,7 +399,7 @@ function App() {
       <CalendarOverlay 
         isOpen={isCalendarOpen}
         onClose={() => setIsCalendarOpen(false)}
-        fetchNotebooks={getCalendarData}
+        notebooks={calendarData}
         onJumpToPage={handleCalendarJump}
       />
 

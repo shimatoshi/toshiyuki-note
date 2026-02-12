@@ -19,16 +19,20 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [allNotebooks, setAllNotebooks] = useState<Notebook[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [hasFetched, setHasFetched] = useState(false)
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !hasFetched) {
       setIsLoading(true)
       fetchNotebooks().then(data => {
         setAllNotebooks(data)
         setIsLoading(false)
+        setHasFetched(true)
       })
+    } else if (!isOpen) {
+        setHasFetched(false) // Reset on close so it fetches again next time
     }
-  }, [isOpen, fetchNotebooks])
+  }, [isOpen, hasFetched, fetchNotebooks])
 
   if (!isOpen) return null
 

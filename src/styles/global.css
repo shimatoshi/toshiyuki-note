@@ -138,6 +138,14 @@ textarea {
   padding-bottom: 40px;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* Footer Navigation */
 .footer {
   height: var(--footer-height);

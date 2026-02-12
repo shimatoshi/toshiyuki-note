@@ -185,6 +185,7 @@ textarea {
   animation: fadeIn 0.2s ease;
 }
 
+/* Menu Content */
 .menu-content {
   width: 80%;
   max-width: 300px;
@@ -199,18 +200,98 @@ textarea {
 
 .menu-content h2 {
   font-size: 20px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 8px;
 }
 
-.menu-content button {
+.notebook-list-container {
+  flex: 1;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+}
+
+.notebook-list-container h3 {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.notebook-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notebook-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  background-color: transparent;
+}
+
+.notebook-list li.active {
+  background-color: rgba(187, 134, 252, 0.1); /* Accent color with opacity */
+  border-left: 3px solid var(--accent-color);
+}
+
+.notebook-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.notebook-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.notebook-list li.active .notebook-title {
+  color: var(--accent-color);
+  font-weight: 500;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.delete-btn:hover {
+  color: var(--danger-color);
+  opacity: 1;
+}
+
+.menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-btn {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 16px;
+  padding: 14px;
   background-color: var(--bg-color);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -221,14 +302,10 @@ textarea {
   transition: background 0.2s;
 }
 
-.menu-content button:active {
+.action-btn:active {
   background-color: var(--border-color);
 }
 
-.menu-content button.danger {
-  border-color: var(--danger-color);
-  color: var(--danger-color);
-}
 
 .menu-footer {
   margin-top: auto;

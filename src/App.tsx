@@ -1,106 +1,63 @@
-import { useState, useEffect } from 'react'
-import { v4 as uuidv4 } from 'uuid'
+import { useState } from 'react'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { useSwipeable } from 'react-swipeable'
-import type { Notebook, Page } from './types'
-import { BookOpen, ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check } from 'lucide-react'
+import { useNotebooks } from './hooks/useNotebooks'
+import { ChevronLeft, ChevronRight, Menu, Download, Trash2, PlusCircle, Check, FileText } from 'lucide-react'
 import './styles/global.css'
 
-// ----------------------------------------------------------------------
-// Constants
-// ----------------------------------------------------------------------
 const TOTAL_PAGES = 100
-const STORAGE_KEY = 'toshiyuki-notebook-v1'
-
-// ----------------------------------------------------------------------
-// Helper: Create a new blank notebook
-// ----------------------------------------------------------------------
-const createNewNotebook = (): Notebook => {
-  const pages: Page[] = Array.from({ length: TOTAL_PAGES }, (_, i) => ({
-    pageNumber: i + 1,
-    content: '',
-    lastModified: new Date().toISOString(),
-  }))
-
-  return {
-    id: uuidv4(),
-    title: '新しいノート',
-    createdAt: new Date().toISOString(),
-    currentPage: 1,
-    pages,
-  }
-}
 
 function App() {
-  // --------------------------------------------------------------------
-  // State
-  // --------------------------------------------------------------------
-  const [notebook, setNotebook] = useState<Notebook | null>(null)
+  const { 
+    notebooks, 
+    currentNotebook, 
+    isLoading, 
+    createNotebook, 
+    loadNotebook, 
+    deleteNotebook,
+    updateNotebook 
+  } = useNotebooks()
+
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
   const [tempTitle, setTempTitle] = useState('')
 
-  // --------------------------------------------------------------------
-  // Effects: Load & Save
-  // --------------------------------------------------------------------
-  useEffect(() => {
-    const savedData = localStorage.getItem(STORAGE_KEY)
-    if (savedData) {
-      try {
-        setNotebook(JSON.parse(savedData))
-      } catch (e) {
-        console.error('Failed to parse notebook data', e)
-        setNotebook(createNewNotebook())
-      }
-    } else {
-      const newBook = createNewNotebook()
-      setNotebook(newBook)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newBook))
-    }
-  }, [])
-
-  useEffect(() => {
-    if (notebook) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notebook))
-    }
-  }, [notebook])
-
-  // --------------------------------------------------------------------
-  // Actions
-  // --------------------------------------------------------------------
+  // Action: Page Change
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > TOTAL_PAGES) return
-    if (!notebook) return
+    if (!currentNotebook) return
 
-    setNotebook({ ...notebook, currentPage: newPage })
+    updateNotebook({ ...currentNotebook, currentPage: newPage })
     window.scrollTo(0, 0)
   }
 
+  // Action: Content Change
   const handleContentChange = (content: string) => {
-    if (!notebook) return
+    if (!currentNotebook) return
 
-    const newPages = [...notebook.pages]
-    const pageIndex = notebook.currentPage - 1
+    const newPages = [...currentNotebook.pages]
+    const pageIndex = currentNotebook.currentPage - 1
     newPages[pageIndex] = {
       ...newPages[pageIndex],
       content,
       lastModified: new Date().toISOString(),
     }
 
-    setNotebook({ ...notebook, pages: newPages })
+    updateNotebook({ ...currentNotebook, pages: newPages })
   }
 
+  // Action: Download
   const handleDownloadZip = async () => {
-    if (!notebook) return
+    if (!currentNotebook) return
 
     const zip = new JSZip()
     let hasContent = false
 
-    notebook.pages.forEach((page) => {
+    currentNotebook.pages.forEach((page) => {
       if (page.content.trim()) {
         const date = new Date(page.lastModified)
-        const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '') // YYYYMMDD
+        const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
         const filename = `${String(page.pageNumber).padStart(3, '0')}_${dateStr}.txt`
         zip.file(filename, page.content)
         hasContent = true
@@ -108,59 +65,56 @@ function App() {
     })
 
     if (!hasContent) {
-      alert('内容が空のため、保存するものがありせん。')
+      alert('内容が空のため、保存するものがありません。')
       return
     }
 
     const content = await zip.generateAsync({ type: 'blob' })
-    saveAs(content, `${notebook.title}.zip`)
+    saveAs(content, `${currentNotebook.title}.zip`)
     setIsMenuOpen(false)
   }
 
-  const handleNewNotebook = () => {
-    if (confirm('現在のノートを破棄して新しいノートを作成しますか？\n(未保存の内容は消えます。必要なら先にダウンロードしてください)')) {
-      const newBook = createNewNotebook()
-      setNotebook(newBook)
-      setIsMenuOpen(false)
-    }
+  // Action: Create New
+  const handleCreateNotebook = () => {
+    createNotebook()
+    setIsMenuOpen(false)
   }
   
+  // Action: Rename
   const startRenaming = () => {
-    if (!notebook) return
-    setTempTitle(notebook.title)
+    if (!currentNotebook) return
+    setTempTitle(currentNotebook.title)
     setIsRenaming(true)
   }
 
   const saveTitle = () => {
-    if (!notebook) return
-    setNotebook({ ...notebook, title: tempTitle })
+    if (!currentNotebook) return
+    updateNotebook({ ...currentNotebook, title: tempTitle })
     setIsRenaming(false)
   }
 
-  // --------------------------------------------------------------------
   // Swipe Handlers
-  // --------------------------------------------------------------------
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
-      if (notebook && notebook.currentPage < TOTAL_PAGES) {
-         handlePageChange(notebook.currentPage + 1)
-      } else if (notebook && notebook.currentPage === TOTAL_PAGES) {
+      if (currentNotebook && currentNotebook.currentPage < TOTAL_PAGES) {
+         handlePageChange(currentNotebook.currentPage + 1)
+      } else if (currentNotebook && currentNotebook.currentPage === TOTAL_PAGES) {
          alert('最後のページです。メニューから保存して新しいノートを作成してください。')
       }
     },
     onSwipedRight: () => {
-      if (notebook && notebook.currentPage > 1) {
-        handlePageChange(notebook.currentPage - 1)
+      if (currentNotebook && currentNotebook.currentPage > 1) {
+        handlePageChange(currentNotebook.currentPage - 1)
       }
     },
     preventScrollOnSwipe: true,
     trackMouse: false
   })
 
-  if (!notebook) return <div className="loading">Loading...</div>
+  if (isLoading || !currentNotebook) return <div className="loading">Loading...</div>
 
-  const currentPageData = notebook.pages[notebook.currentPage - 1]
-  const isLastPage = notebook.currentPage === TOTAL_PAGES
+  const currentPageData = currentNotebook.pages[currentNotebook.currentPage - 1]
+  const isLastPage = currentNotebook.currentPage === TOTAL_PAGES
 
   return (
     <div className="app-container">
@@ -184,12 +138,12 @@ function App() {
               <button className="icon-btn-small" onClick={saveTitle}><Check size={16} /></button>
             </div>
           ) : (
-            <h1 onClick={startRenaming}>{notebook.title}</h1>
+            <h1 onClick={startRenaming}>{currentNotebook.title}</h1>
           )}
         </div>
 
         <div className="page-indicator">
-          <span>{notebook.currentPage}</span>
+          <span>{currentNotebook.currentPage}</span>
           <span className="divider">/</span>
           <span>{TOTAL_PAGES}</span>
         </div>
@@ -200,14 +154,43 @@ function App() {
         <div className="menu-overlay" onClick={() => setIsMenuOpen(false)}>
           <div className="menu-content" onClick={(e) => e.stopPropagation()}>
             <h2>メニュー</h2>
-            <button onClick={handleDownloadZip}>
-              <Download size={20} /> ZIPで保存 (バックアップ)
-            </button>
-            <button onClick={handleNewNotebook} className="danger">
-              <PlusCircle size={20} /> 新しいノートを作成
-            </button>
+            
+            <div className="notebook-list-container">
+              <h3>ノート一覧</h3>
+              <ul className="notebook-list">
+                {notebooks.map(nb => (
+                  <li key={nb.id} className={nb.id === currentNotebook.id ? 'active' : ''}>
+                    <div className="notebook-info" onClick={() => {
+                      loadNotebook(nb.id)
+                      setIsMenuOpen(false)
+                    }}>
+                      <FileText size={16} />
+                      <span className="notebook-title">{nb.title}</span>
+                    </div>
+                    {notebooks.length > 1 && (
+                      <button className="delete-btn" onClick={(e) => {
+                        e.stopPropagation()
+                        deleteNotebook(nb.id)
+                      }}>
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="menu-actions">
+              <button onClick={handleCreateNotebook} className="action-btn">
+                <PlusCircle size={20} /> 新しいノートを作成
+              </button>
+              <button onClick={handleDownloadZip} className="action-btn">
+                <Download size={20} /> ZIPで保存
+              </button>
+            </div>
+            
             <div className="menu-footer">
-              <p>Ver 1.0.0 (Toshiyuki Note)</p>
+              <p>Ver 1.1.0 (Multiple Notebooks)</p>
             </div>
           </div>
         </div>
@@ -218,7 +201,7 @@ function App() {
         <textarea
           value={currentPageData.content}
           onChange={(e) => handleContentChange(e.target.value)}
-          placeholder={`Page ${notebook.currentPage}`}
+          placeholder={`Page ${currentNotebook.currentPage}`}
           spellCheck={false}
         />
       </main>
@@ -227,8 +210,8 @@ function App() {
       <footer className="footer">
         <button 
           className="nav-btn" 
-          disabled={notebook.currentPage === 1}
-          onClick={() => handlePageChange(notebook.currentPage - 1)}
+          disabled={currentNotebook.currentPage === 1}
+          onClick={() => handlePageChange(currentNotebook.currentPage - 1)}
         >
           <ChevronLeft size={24} />
           <span>前へ</span>
@@ -241,7 +224,7 @@ function App() {
             if (isLastPage) {
               alert('最後のページです。メニューから保存して新しいノートを作成してください。')
             } else {
-              handlePageChange(notebook.currentPage + 1)
+              handlePageChange(currentNotebook.currentPage + 1)
             }
           }}
         >

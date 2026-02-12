@@ -4,6 +4,13 @@ export interface Page {
   lastModified: string; // ISO 8601
 }
 
+export interface NotebookMetadata {
+  id: string;
+  title: string;
+  createdAt: string;
+  lastModified: string;
+}
+
 export interface Notebook {
   id: string;
   title: string;

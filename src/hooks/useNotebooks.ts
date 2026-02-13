@@ -173,26 +173,32 @@ export const useNotebooks = () => {
     }
   }
 
-  const updateNotebook = async (notebook: Notebook) => {
-    // Optimistic UI update
+  const updateNotebook = async (notebook: Notebook, immediate = false) => {
+    // 1. UIを即座に更新 (サクサク感)
     setCurrentNotebook(notebook)
     
-    // Background save
-    await db.saveNotebook(notebook)
-    
-        // Update metadata list if title changed
-    
-        setNotebooks(prev => prev.map(n => 
-    
-          n.id === notebook.id 
-    
-            ? { ...n, title: notebook.title, lastModified: new Date().toISOString() }
-    
-            : n
-    
-        ))
-    
-      }
+    // 2. メタデータリストの更新 (タイトル変更時などのため)
+    setNotebooks(prev => prev.map(n => 
+      n.id === notebook.id 
+        ? { ...n, title: notebook.title, lastModified: new Date().toISOString() }
+        : n
+    ))
+
+    // 3. データベースへの保存
+    if (immediate) {
+      await db.saveNotebook(notebook)
+    } else {
+      // 入力中の場合はタイマーで遅延実行
+      const timerId = `save-${notebook.id}`
+      const existingTimer = (window as any)[timerId]
+      if (existingTimer) clearTimeout(existingTimer);
+      
+      (window as any)[timerId] = setTimeout(async () => {
+        await db.saveNotebook(notebook)
+        delete (window as any)[timerId]
+      }, 1000) // 1秒間入力が止まったら保存
+    }
+  }
     
     
     

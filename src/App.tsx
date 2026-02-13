@@ -80,7 +80,7 @@ function App() {
 
   const handleRename = (newTitle: string) => {
     if (!currentNotebook) return
-    updateNotebook({ ...currentNotebook, title: newTitle })
+    updateNotebook({ ...currentNotebook, title: newTitle }, true)
   }
 
   // Action: Add Attachment
@@ -253,7 +253,7 @@ function App() {
       lastModified: new Date().toISOString(),
     }
 
-    await updateNotebook({ ...currentNotebook, pages: newPages })
+    await updateNotebook({ ...currentNotebook, pages: newPages }, true)
     setPreviewImage(null)
   }
 

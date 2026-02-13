@@ -232,7 +232,7 @@ function App() {
         if (error.code === 3) msg = '位置情報の取得がタイムアウトしました。'
         alert(msg)
       },
-      { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 60000, maximumAge: 300000 }
     )
   }
 

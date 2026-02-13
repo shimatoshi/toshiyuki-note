@@ -226,9 +226,13 @@ function App() {
       },
       (error) => {
         console.error('Geolocation error', error)
-        alert('位置情報の取得に失敗しました。')
+        let msg = '位置情報の取得に失敗しました。'
+        if (error.code === 1) msg = '位置情報の利用が許可されていません。ブラウザの設定を確認してください。'
+        if (error.code === 2) msg = '位置情報が取得できませんでした（電波状況などを確認してください）。'
+        if (error.code === 3) msg = '位置情報の取得がタイムアウトしました。'
+        alert(msg)
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
     )
   }
 

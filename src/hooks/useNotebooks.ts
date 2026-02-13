@@ -77,17 +77,17 @@ export const useNotebooks = () => {
     const init = async () => {
       await migrateFromLocalStorage()
       
-      // Ensure calendar index is built (quick check)
-      const hasIndex = (await db.getCalendarIndex(new Date().getFullYear(), new Date().getMonth() + 1)).length > 0
-      if (!hasIndex) {
-        // If no index found for current month, maybe rebuild all?
-        // Let's just do a full rebuild if metadata exists but index empty.
-        // Or check a specific flag. For now, simple rebuild if empty.
-        console.log('Building calendar index...')
-        const all = await db.getAllMetadata()
-        for (const meta of all) {
-          const nb = await db.getNotebook(meta.id)
-          if (nb) await db.saveNotebook(nb) // Re-save triggers index update
+      // Use a flag to avoid rebuilding index every time
+      const INDEX_BUILT_KEY = 'toshiyuki-calendar-index-v1'
+      const isIndexBuilt = localStorage.getItem(INDEX_BUILT_KEY)
+      
+      if (!isIndexBuilt) {
+        console.log('Building calendar index (optimized)...')
+        try {
+          await db.rebuildCalendarIndex()
+          localStorage.setItem(INDEX_BUILT_KEY, 'true')
+        } catch (e) {
+          console.error('Failed to build index', e)
         }
       }
       

@@ -71,32 +71,46 @@ export const db = {
   },
 
   async getNotebooksForCalendar(): Promise<Notebook[]> {
+    // Deprecated: keeping for compatibility if needed, but switching to monthly fetch
+    return [] 
+  },
+
+  async getCalendarMonthData(year: number, month: number): Promise<Array<{ date: string, notebookId: string, title: string, pageNumber: number, time: string }>> {
     const db = await initDB()
     const tx = db.transaction('notebooks', 'readonly')
     const store = tx.objectStore('notebooks')
     
-    const lightNotebooks: Notebook[] = []
+    const results: Array<{ date: string, notebookId: string, title: string, pageNumber: number, time: string }> = []
+    const targetPrefix = `${year}-${String(month).padStart(2, '0')}` // YYYY-MM
+    
     let cursor = await store.openCursor()
     
     while (cursor) {
       const nb = cursor.value
-      // Create a lightweight copy
-      const lightNb: any = {
-        id: nb.id,
-        title: nb.title,
-        pages: nb.pages.map((p: any) => ({
-          pageNumber: p.pageNumber,
-          lastModified: p.lastModified,
-          // We only need to know if content/attachments exist
-          content: p.content && p.content.length > 0 ? 'exists' : '',
-          attachments: p.attachments && p.attachments.length > 0 ? [{ id: 'dummy', type: 'image', data: '', createdAt: '' }] : []
-        }))
+      // Check each page
+      for (const p of nb.pages) {
+        if (p.lastModified && p.lastModified.startsWith(targetPrefix)) {
+          // Check if it has content
+          const hasContent = (p.content && p.content.trim().length > 0) || (p.attachments && p.attachments.length > 0)
+          
+          if (hasContent) {
+            const d = new Date(p.lastModified)
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            
+            results.push({
+              date: dateStr,
+              notebookId: nb.id,
+              title: nb.title,
+              pageNumber: p.pageNumber,
+              time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            })
+          }
+        }
       }
-      lightNotebooks.push(lightNb)
       cursor = await cursor.continue()
     }
     
-    return lightNotebooks
+    return results
   },
 
   async deleteNotebook(id: string): Promise<void> {

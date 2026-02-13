@@ -193,85 +193,29 @@ export const useNotebooks = () => {
     
     
     
-            const getCalendarData = useCallback(async () => {
-    
-    
-    
-              try {
-    
-    
-    
-                return await db.getNotebooksForCalendar()
-    
-    
-    
-              } catch (e) {
-    
-    
-    
-                console.error('Failed to get calendar data', e)
-    
-    
-    
-                return []
-    
-    
-    
+              const getCalendarData = useCallback(async () => {
+                return [] // No longer used
+              }, [])
+            
+              const getMonthlyActivity = useCallback(async (year: number, month: number) => {
+                try {
+                  return await db.getCalendarMonthData(year, month)
+                } catch (e) {
+                  console.error('Failed to get monthly activity', e)
+                  return []
+                }
+              }, [])
+            
+              return {
+                notebooks,
+                currentNotebook,
+                isLoading,
+                createNotebook,
+                loadNotebook,
+                deleteNotebook,
+                updateNotebook,
+                searchNotebooks,
+                getCalendarData,
+                getMonthlyActivity
               }
-    
-    
-    
-            }, [])
-    
-    
-    
-          
-    
-    
-    
-            return {
-    
-    
-    
-              notebooks,
-    
-    
-    
-              currentNotebook,
-    
-    
-    
-              isLoading,
-    
-    
-    
-              createNotebook,
-    
-    
-    
-              loadNotebook,
-    
-    
-    
-              deleteNotebook,
-    
-    
-    
-              updateNotebook,
-    
-    
-    
-              searchNotebooks,
-    
-    
-    
-              getCalendarData
-    
-    
-    
-            }
-    
-    
-    
-          }    
-    
+            }    

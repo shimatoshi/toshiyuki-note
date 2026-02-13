@@ -1,32 +1,39 @@
 import React, { useState, useEffect } from 'react'
 import { X, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
-import type { Notebook } from '../types'
+
+interface ActivityItem {
+  date: string
+  notebookId: string
+  title: string
+  pageNumber: number
+  time: string
+}
 
 interface CalendarOverlayProps {
   isOpen: boolean
   onClose: () => void
-  notebooks: Notebook[]
+  fetchMonthlyData: (year: number, month: number) => Promise<ActivityItem[]>
   onJumpToPage: (notebookId: string, pageNumber: number) => void
 }
 
 export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({ 
   isOpen, 
   onClose,
-  notebooks,
+  fetchMonthlyData,
   onJumpToPage
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   
-  // 今表示している月のデータだけを計算して保持する
   const [monthlyActivity, setMonthlyActivity] = useState<Record<string, boolean>>({})
-  const [dailyDetails, setDailyDetails] = useState<Record<string, Array<{ notebookId: string, title: string, pageNumber: number, time: string }>>>({})
+  const [dailyDetails, setDailyDetails] = useState<Record<string, ActivityItem[]>>({})
+  const [isLoading, setIsLoading] = useState(false)
 
   if (!isOpen) return null
 
   // Calendar Logic
   const year = currentDate.getFullYear()
-  const month = currentDate.getMonth()
+  const month = currentDate.getMonth() // 0-based
 
   const firstDayOfMonth = new Date(year, month, 1)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -40,55 +47,36 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
     days.push(new Date(year, month, i))
   }
 
-  // 表示月が変わった時だけ、その月のデータを計算する
+  // Fetch data when month changes
   useEffect(() => {
-    if (!notebooks || notebooks.length === 0) return
+    if (!isOpen) return
 
-    // 計算を非同期にして描画ブロックを防ぐ
-    const timer = setTimeout(() => {
-      const newActivity: Record<string, boolean> = {}
-      const newDetails: Record<string, any[]> = {}
-      
-      // YYYY-MM 文字列 (計算対象の月)
-      const targetMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`
-
-      notebooks.forEach(nb => {
-        if (!nb.pages) return
+    setIsLoading(true)
+    // Month needs to be 1-based for DB query logic if designed so, but my DB logic used YYYY-MM
+    // DB logic uses String(month).padStart(2, '0').
+    // Wait, DB logic received `month` as number.
+    // If I pass `month + 1`, then padStart(2, '0') makes '02' for Feb. Correct.
+    
+    fetchMonthlyData(year, month + 1)
+      .then(items => {
+        const newActivity: Record<string, boolean> = {}
+        const newDetails: Record<string, ActivityItem[]> = {}
         
-        nb.pages.forEach(pg => {
-          // コンテンツか添付ファイルがあるページのみ
-          const hasData = (pg.content && pg.content.trim().length > 0) || (pg.attachments && pg.attachments.length > 0)
-          
-          if (hasData && pg.lastModified) {
-            try {
-              // 文字列操作だけで月判定（Dateオブジェクト生成より高速）
-              if (pg.lastModified.startsWith(targetMonthStr)) {
-                const d = new Date(pg.lastModified)
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                
-                newActivity[key] = true
-                
-                if (!newDetails[key]) newDetails[key] = []
-                newDetails[key].push({
-                  notebookId: nb.id,
-                  title: nb.title,
-                  pageNumber: pg.pageNumber,
-                  time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                })
-              }
-            } catch (e) {
-              // Ignore
-            }
-          }
+        items.forEach(item => {
+          newActivity[item.date] = true
+          if (!newDetails[item.date]) newDetails[item.date] = []
+          newDetails[item.date].push(item)
         })
+        
+        setMonthlyActivity(newActivity)
+        setDailyDetails(newDetails)
+        setIsLoading(false)
       })
-
-      setMonthlyActivity(newActivity)
-      setDailyDetails(newDetails)
-    }, 10) // 10ms delay to let UI render first
-
-    return () => clearTimeout(timer)
-  }, [year, month, notebooks])
+      .catch(err => {
+        console.error(err)
+        setIsLoading(false)
+      })
+  }, [year, month, isOpen, fetchMonthlyData])
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1))
@@ -128,28 +116,32 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
         <div className="calendar-grid-header">
           <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
         </div>
+        
+        {isLoading ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>読み込み中...</div>
+        ) : (
+            <div className="calendar-grid">
+            {days.map((date, idx) => {
+                if (!date) return <div key={`empty-${idx}`} className="calendar-day empty"></div>
+                
+                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+                const hasActivity = monthlyActivity[key]
+                const isToday = new Date().toDateString() === date.toDateString()
+                const isSelected = selectedDate === key
 
-        <div className="calendar-grid">
-          {days.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="calendar-day empty"></div>
-            
-            const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-            const hasActivity = monthlyActivity[key]
-            const isToday = new Date().toDateString() === date.toDateString()
-            const isSelected = selectedDate === key
-
-            return (
-              <div 
-                key={idx} 
-                className={`calendar-day ${hasActivity ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
-                onClick={() => handleDateClick(date)}
-              >
-                <span>{date.getDate()}</span>
-                {hasActivity && <div className="dot"></div>}
-              </div>
-            )
-          })}
-        </div>
+                return (
+                <div 
+                    key={idx} 
+                    className={`calendar-day ${hasActivity ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                    onClick={() => handleDateClick(date)}
+                >
+                    <span>{date.getDate()}</span>
+                    {hasActivity && <div className="dot"></div>}
+                </div>
+                )
+            })}
+            </div>
+        )}
         
         {selectedDate && selectedActivities && selectedActivities.length > 0 && (
           <div className="activity-list">

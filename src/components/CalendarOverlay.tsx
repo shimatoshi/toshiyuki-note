@@ -44,47 +44,50 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   useEffect(() => {
     if (!notebooks || notebooks.length === 0) return
 
-    const newActivity: Record<string, boolean> = {}
-    const newDetails: Record<string, any[]> = {}
-    
-    // YYYY-MM 文字列 (計算対象の月)
-    const targetMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`
-
-    notebooks.forEach(nb => {
-      if (!nb.pages) return
+    // 計算を非同期にして描画ブロックを防ぐ
+    const timer = setTimeout(() => {
+      const newActivity: Record<string, boolean> = {}
+      const newDetails: Record<string, any[]> = {}
       
-      nb.pages.forEach(pg => {
-        // コンテンツか添付ファイルがあるページのみ
-        const hasData = (pg.content && pg.content.trim().length > 0) || (pg.attachments && pg.attachments.length > 0)
+      // YYYY-MM 文字列 (計算対象の月)
+      const targetMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`
+
+      notebooks.forEach(nb => {
+        if (!nb.pages) return
         
-        if (hasData && pg.lastModified) {
-          try {
-            // 文字列操作だけで月判定（Dateオブジェクト生成より高速）
-            // ISO文字列: 2026-02-13T... なので先頭7文字で判定可能
-            if (pg.lastModified.startsWith(targetMonthStr)) {
-              const d = new Date(pg.lastModified)
-              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-              
-              newActivity[key] = true
-              
-              if (!newDetails[key]) newDetails[key] = []
-              newDetails[key].push({
-                notebookId: nb.id,
-                title: nb.title,
-                pageNumber: pg.pageNumber,
-                time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              })
+        nb.pages.forEach(pg => {
+          // コンテンツか添付ファイルがあるページのみ
+          const hasData = (pg.content && pg.content.trim().length > 0) || (pg.attachments && pg.attachments.length > 0)
+          
+          if (hasData && pg.lastModified) {
+            try {
+              // 文字列操作だけで月判定（Dateオブジェクト生成より高速）
+              if (pg.lastModified.startsWith(targetMonthStr)) {
+                const d = new Date(pg.lastModified)
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                
+                newActivity[key] = true
+                
+                if (!newDetails[key]) newDetails[key] = []
+                newDetails[key].push({
+                  notebookId: nb.id,
+                  title: nb.title,
+                  pageNumber: pg.pageNumber,
+                  time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                })
+              }
+            } catch (e) {
+              // Ignore
             }
-          } catch (e) {
-            // Ignore
           }
-        }
+        })
       })
-    })
 
-    setMonthlyActivity(newActivity)
-    setDailyDetails(newDetails)
+      setMonthlyActivity(newActivity)
+      setDailyDetails(newDetails)
+    }, 10) // 10ms delay to let UI render first
 
+    return () => clearTimeout(timer)
   }, [year, month, notebooks])
 
   const handlePrevMonth = () => {

@@ -317,7 +317,6 @@ function App() {
     // Fetch data first, then open
     try {
       const data = await getCalendarData()
-      alert(`データ取得成功: ${data.length}件のノート`)
       setCalendarData(data)
       setIsCalendarOpen(true)
     } catch (e) {

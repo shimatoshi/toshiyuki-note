@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { X, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import type { Notebook } from '../types'
 
@@ -16,8 +16,46 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   onJumpToPage
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   
   if (!isOpen) return null
+
+  // 1. 日付ごとのアクティビティを計算 (安全版)
+  const activityMap = useMemo(() => {
+    const map: Record<string, Array<{ notebookId: string, title: string, pageNumber: number, time: string }>> = {}
+    
+    if (!notebooks || !Array.isArray(notebooks)) return map
+
+    notebooks.forEach(nb => {
+      if (!nb || !nb.pages) return
+      
+      nb.pages.forEach(pg => {
+        // コンテンツか添付ファイルがあるページのみ対象
+        const hasData = (pg.content && pg.content.trim().length > 0) || (pg.attachments && pg.attachments.length > 0)
+        
+        if (hasData && pg.lastModified) {
+          try {
+            const d = new Date(pg.lastModified)
+            if (isNaN(d.getTime())) return
+            
+            // YYYY-MM-DD 形式のキーを作成
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            
+            if (!map[key]) map[key] = []
+            map[key].push({
+              notebookId: nb.id,
+              title: nb.title,
+              pageNumber: pg.pageNumber,
+              time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            })
+          } catch (e) {
+            // エラーは無視して次に進む
+          }
+        }
+      })
+    })
+    return map
+  }, [notebooks])
 
   // Calendar Logic
   const year = currentDate.getFullYear()
@@ -37,17 +75,30 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1))
+    setSelectedDate(null)
   }
 
   const handleNextMonth = () => {
     setCurrentDate(new Date(year, month + 1, 1))
+    setSelectedDate(null)
   }
+
+  const handleDateClick = (date: Date) => {
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    if (activityMap[key]) {
+      setSelectedDate(key === selectedDate ? null : key)
+    } else {
+      setSelectedDate(null)
+    }
+  }
+
+  const selectedActivities = selectedDate ? activityMap[selectedDate] : []
 
   return (
     <div className="overlay-container" onClick={onClose}>
       <div className="overlay-content calendar-content" onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
-          <h2>カレンダー（シンプル版）</h2>
+          <h2>カレンダー</h2>
           <button className="icon-btn" onClick={onClose}><X size={24} /></button>
         </div>
 
@@ -65,22 +116,47 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
           {days.map((date, idx) => {
             if (!date) return <div key={`empty-${idx}`} className="calendar-day empty"></div>
             
+            const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+            const hasActivity = !!activityMap[key]
             const isToday = new Date().toDateString() === date.toDateString()
+            const isSelected = selectedDate === key
 
             return (
               <div 
                 key={idx} 
-                className={`calendar-day ${isToday ? 'today' : ''}`}
+                className={`calendar-day ${hasActivity ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                onClick={() => handleDateClick(date)}
               >
                 <span>{date.getDate()}</span>
+                {hasActivity && <div className="dot"></div>}
               </div>
             )
           })}
         </div>
         
-        <div style={{ padding: '10px', textAlign: 'center', fontSize: '0.8em', color: '#888' }}>
-          ※現在、詳細データ表示は無効化しています
-        </div>
+        {selectedDate && selectedActivities.length > 0 && (
+          <div className="activity-list">
+            <h3>{selectedDate} の記録</h3>
+            <div className="activity-items">
+              {selectedActivities.map((item, idx) => (
+                <div 
+                  key={idx} 
+                  className="activity-item"
+                  onClick={() => {
+                    onJumpToPage(item.notebookId, item.pageNumber)
+                    onClose()
+                  }}
+                >
+                  <FileText size={16} style={{ color: 'var(--accent-color)' }} />
+                  <div className="activity-info">
+                    <span className="activity-title">{item.title}</span>
+                    <span className="activity-meta">Page {item.pageNumber} • {item.time}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

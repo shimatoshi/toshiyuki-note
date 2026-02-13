@@ -77,6 +77,20 @@ export const useNotebooks = () => {
     const init = async () => {
       await migrateFromLocalStorage()
       
+      // Ensure calendar index is built (quick check)
+      const hasIndex = (await db.getCalendarIndex(new Date().getFullYear(), new Date().getMonth() + 1)).length > 0
+      if (!hasIndex) {
+        // If no index found for current month, maybe rebuild all?
+        // Let's just do a full rebuild if metadata exists but index empty.
+        // Or check a specific flag. For now, simple rebuild if empty.
+        console.log('Building calendar index...')
+        const all = await db.getAllMetadata()
+        for (const meta of all) {
+          const nb = await db.getNotebook(meta.id)
+          if (nb) await db.saveNotebook(nb) // Re-save triggers index update
+        }
+      }
+      
       const allMetadata = await db.getAllMetadata()
       setNotebooks(allMetadata)
 
@@ -197,15 +211,14 @@ export const useNotebooks = () => {
                 return [] // No longer used
               }, [])
             
-              const getMonthlyActivity = useCallback(async (year: number, month: number) => {
-                try {
-                  return await db.getCalendarMonthData(year, month)
-                } catch (e) {
-                  console.error('Failed to get monthly activity', e)
-                  return []
-                }
-              }, [])
-            
+                const getMonthlyActivity = useCallback(async (year: number, month: number) => {
+                  try {
+                    return await db.getCalendarIndex(year, month)
+                  } catch (e) {
+                    console.error('Failed to get monthly activity', e)
+                    return []
+                  }
+                }, [])            
               return {
                 notebooks,
                 currentNotebook,

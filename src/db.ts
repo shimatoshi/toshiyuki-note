@@ -1,6 +1,13 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { Notebook, NotebookMetadata } from './types'
 
+interface CalendarIndexEntry {
+  notebookId: string
+  title: string
+  pageNumber: number
+  time: string
+}
+
 interface ToshiyukiDB extends DBSchema {
   metadata: {
     key: string;
@@ -10,22 +17,29 @@ interface ToshiyukiDB extends DBSchema {
     key: string;
     value: Notebook;
   };
+  calendar_index: {
+    key: string; // YYYY-MM-DD
+    value: CalendarIndexEntry[];
+  };
 }
 
 const DB_NAME = 'toshiyuki-db'
-const DB_VERSION = 1
+const DB_VERSION = 2 // Increment version
 
 let dbPromise: Promise<IDBPDatabase<ToshiyukiDB>>
 
 export const initDB = () => {
   if (!dbPromise) {
     dbPromise = openDB<ToshiyukiDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, newVersion, transaction) {
         if (!db.objectStoreNames.contains('metadata')) {
           db.createObjectStore('metadata', { keyPath: 'id' })
         }
         if (!db.objectStoreNames.contains('notebooks')) {
           db.createObjectStore('notebooks', { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains('calendar_index')) {
+          db.createObjectStore('calendar_index')
         }
       },
     })
@@ -48,7 +62,7 @@ export const db = {
 
   async saveNotebook(notebook: Notebook): Promise<void> {
     const db = await initDB()
-    const tx = db.transaction(['notebooks', 'metadata'], 'readwrite')
+    const tx = db.transaction(['notebooks', 'metadata', 'calendar_index'], 'readwrite')
     
     // Save full notebook
     await tx.objectStore('notebooks').put(notebook)
@@ -58,12 +72,80 @@ export const db = {
       id: notebook.id,
       title: notebook.title,
       createdAt: notebook.createdAt,
-      lastModified: new Date().toISOString() // Update timestamp
+      lastModified: new Date().toISOString()
     })
+
+    // Update Calendar Index (Efficiently)
+    // 1. Get entries for this notebook and remove old ones (Wait, iterating all keys is slow. 
+    // Ideally we store index by date. But updating a notebook means we might change dates or content.
+    // Simple approach: Iterate pages of THIS notebook and update index for those dates.)
+    
+    // Correct Approach: 
+    // We are organizing index by DATE. So index['2026-02-13'] = [{nbId, pg1}, {nbId, pg2}...]
+    // When saving a notebook, we should update the entries for the dates present in this notebook.
+    // However, cleaning up OLD entries for this notebook from dates that are no longer relevant is hard without reverse index.
+    // For now, let's just ADD/UPDATE entries for current pages. Old garbage might remain but it's just text.
+    // Better: We can check if we really need to delete. 
+    // Let's keep it simple: Just add/update for now.
+    
+    for (const page of notebook.pages) {
+      if ((page.content && page.content.trim().length > 0) || (page.attachments && page.attachments.length > 0)) {
+        if (page.lastModified) {
+           try {
+             const d = new Date(page.lastModified)
+             if (!isNaN(d.getTime())) {
+               const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+               
+               const existing = (await tx.objectStore('calendar_index').get(dateKey)) || []
+               // Remove existing entry for this page to avoid duplicates
+               const filtered = existing.filter(e => !(e.notebookId === notebook.id && e.pageNumber === page.pageNumber))
+               
+               filtered.push({
+                 notebookId: notebook.id,
+                 title: notebook.title,
+                 pageNumber: page.pageNumber,
+                 time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+               })
+               
+               await tx.objectStore('calendar_index').put(filtered, dateKey)
+             }
+           } catch (e) {
+             console.error(e)
+           }
+        }
+      }
+    }
     
     await tx.done
   },
   
+  // New efficient method
+  async getCalendarIndex(year: number, month: number): Promise<any[]> {
+    const db = await initDB()
+    // We need to fetch keys that match YYYY-MM
+    // IDB doesn't support partial key match easily without cursor.
+    // But since keys are YYYY-MM-DD, we can use a key range!
+    const startKey = `${year}-${String(month).padStart(2, '0')}-01`
+    const endKey = `${year}-${String(month).padStart(2, '0')}-31`
+    const range = IDBKeyRange.bound(startKey, endKey)
+    
+    const keys = await db.getAllKeys('calendar_index', range)
+    const results = []
+    
+    for (const key of keys) {
+      const entries = await db.get('calendar_index', key)
+      if (entries) {
+        entries.forEach((e: any) => {
+           results.push({
+             date: key as string, // key is date string
+             ...e
+           })
+        })
+      }
+    }
+    return results
+  },
+
   // Specifically for saving just metadata (e.g. initial migration)
   async saveMetadata(metadata: NotebookMetadata): Promise<void> {
     const db = await initDB()

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { X, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import type { Notebook } from '../types'
 
@@ -18,44 +18,11 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   
+  // 今表示している月のデータだけを計算して保持する
+  const [monthlyActivity, setMonthlyActivity] = useState<Record<string, boolean>>({})
+  const [dailyDetails, setDailyDetails] = useState<Record<string, Array<{ notebookId: string, title: string, pageNumber: number, time: string }>>>({})
+
   if (!isOpen) return null
-
-  // 1. 日付ごとのアクティビティを計算 (安全版)
-  const activityMap = useMemo(() => {
-    const map: Record<string, Array<{ notebookId: string, title: string, pageNumber: number, time: string }>> = {}
-    
-    if (!notebooks || !Array.isArray(notebooks)) return map
-
-    notebooks.forEach(nb => {
-      if (!nb || !nb.pages) return
-      
-      nb.pages.forEach(pg => {
-        // コンテンツか添付ファイルがあるページのみ対象
-        const hasData = (pg.content && pg.content.trim().length > 0) || (pg.attachments && pg.attachments.length > 0)
-        
-        if (hasData && pg.lastModified) {
-          try {
-            const d = new Date(pg.lastModified)
-            if (isNaN(d.getTime())) return
-            
-            // YYYY-MM-DD 形式のキーを作成
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            
-            if (!map[key]) map[key] = []
-            map[key].push({
-              notebookId: nb.id,
-              title: nb.title,
-              pageNumber: pg.pageNumber,
-              time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            })
-          } catch (e) {
-            // エラーは無視して次に進む
-          }
-        }
-      })
-    })
-    return map
-  }, [notebooks])
 
   // Calendar Logic
   const year = currentDate.getFullYear()
@@ -73,6 +40,53 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
     days.push(new Date(year, month, i))
   }
 
+  // 表示月が変わった時だけ、その月のデータを計算する
+  useEffect(() => {
+    if (!notebooks || notebooks.length === 0) return
+
+    const newActivity: Record<string, boolean> = {}
+    const newDetails: Record<string, any[]> = {}
+    
+    // YYYY-MM 文字列 (計算対象の月)
+    const targetMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`
+
+    notebooks.forEach(nb => {
+      if (!nb.pages) return
+      
+      nb.pages.forEach(pg => {
+        // コンテンツか添付ファイルがあるページのみ
+        const hasData = (pg.content && pg.content.trim().length > 0) || (pg.attachments && pg.attachments.length > 0)
+        
+        if (hasData && pg.lastModified) {
+          try {
+            // 文字列操作だけで月判定（Dateオブジェクト生成より高速）
+            // ISO文字列: 2026-02-13T... なので先頭7文字で判定可能
+            if (pg.lastModified.startsWith(targetMonthStr)) {
+              const d = new Date(pg.lastModified)
+              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+              
+              newActivity[key] = true
+              
+              if (!newDetails[key]) newDetails[key] = []
+              newDetails[key].push({
+                notebookId: nb.id,
+                title: nb.title,
+                pageNumber: pg.pageNumber,
+                time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              })
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+      })
+    })
+
+    setMonthlyActivity(newActivity)
+    setDailyDetails(newDetails)
+
+  }, [year, month, notebooks])
+
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1))
     setSelectedDate(null)
@@ -85,14 +99,14 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
 
   const handleDateClick = (date: Date) => {
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-    if (activityMap[key]) {
+    if (monthlyActivity[key]) {
       setSelectedDate(key === selectedDate ? null : key)
     } else {
       setSelectedDate(null)
     }
   }
 
-  const selectedActivities = selectedDate ? activityMap[selectedDate] : []
+  const selectedActivities = selectedDate ? dailyDetails[selectedDate] : []
 
   return (
     <div className="overlay-container" onClick={onClose}>
@@ -117,7 +131,7 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
             if (!date) return <div key={`empty-${idx}`} className="calendar-day empty"></div>
             
             const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-            const hasActivity = !!activityMap[key]
+            const hasActivity = monthlyActivity[key]
             const isToday = new Date().toDateString() === date.toDateString()
             const isSelected = selectedDate === key
 
@@ -134,7 +148,7 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
           })}
         </div>
         
-        {selectedDate && selectedActivities.length > 0 && (
+        {selectedDate && selectedActivities && selectedActivities.length > 0 && (
           <div className="activity-list">
             <h3>{selectedDate} の記録</h3>
             <div className="activity-items">

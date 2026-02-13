@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import type { Notebook } from '../types'
 

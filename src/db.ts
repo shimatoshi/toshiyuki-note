@@ -31,7 +31,7 @@ let dbPromise: Promise<IDBPDatabase<ToshiyukiDB>>
 export const initDB = async () => {
   if (!dbPromise) {
     dbPromise = openDB<ToshiyukiDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion, newVersion, transaction) {
+      upgrade(db) {
         if (!db.objectStoreNames.contains('metadata')) {
           db.createObjectStore('metadata', { keyPath: 'id' })
         }
@@ -135,15 +135,12 @@ export const db = {
   // New efficient method
   async getCalendarIndex(year: number, month: number): Promise<any[]> {
     const db = await initDB()
-    // We need to fetch keys that match YYYY-MM
-    // IDB doesn't support partial key match easily without cursor.
-    // But since keys are YYYY-MM-DD, we can use a key range!
     const startKey = `${year}-${String(month).padStart(2, '0')}-01`
     const endKey = `${year}-${String(month).padStart(2, '0')}-31`
     const range = IDBKeyRange.bound(startKey, endKey)
     
     const keys = await db.getAllKeys('calendar_index', range)
-    const results = []
+    const results: any[] = []
     
     for (const key of keys) {
       const entries = await db.get('calendar_index', key)

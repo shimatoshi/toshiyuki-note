@@ -77,30 +77,14 @@ export const useNotebooks = () => {
     const init = async () => {
       await migrateFromLocalStorage()
       
-      // Use a flag to avoid rebuilding index every time
-      const INDEX_BUILT_KEY = 'toshiyuki-calendar-index-v1'
-      const isIndexBuilt = localStorage.getItem(INDEX_BUILT_KEY)
-      
-      if (!isIndexBuilt) {
-        console.log('Building calendar index (optimized)...')
-        try {
-          await db.rebuildCalendarIndex()
-          localStorage.setItem(INDEX_BUILT_KEY, 'true')
-        } catch (e) {
-          console.error('Failed to build index', e)
-        }
-      }
-      
       const allMetadata = await db.getAllMetadata()
       setNotebooks(allMetadata)
 
       if (allMetadata.length > 0) {
-        // Load most recently modified
         const notebook = await db.getNotebook(allMetadata[0].id)
         if (notebook) {
           setCurrentNotebook(notebook)
         } else {
-          // Metadata exists but data missing?
           await createNotebookInternal()
         }
       } else {
@@ -108,6 +92,20 @@ export const useNotebooks = () => {
       }
       
       setIsLoading(false)
+
+      // Build index in background AFTER app is ready
+      const INDEX_BUILT_KEY = 'toshiyuki-calendar-index-v1'
+      const isIndexBuilt = localStorage.getItem(INDEX_BUILT_KEY)
+      
+      if (!isIndexBuilt) {
+        console.log('Building calendar index in background...')
+        db.rebuildCalendarIndex()
+          .then(() => {
+            localStorage.setItem(INDEX_BUILT_KEY, 'true')
+            console.log('Calendar index built successfully')
+          })
+          .catch(e => console.error('Background index build failed', e))
+      }
     }
 
     init()

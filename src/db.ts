@@ -197,20 +197,15 @@ export const db = {
 
   async rebuildCalendarIndex(): Promise<void> {
     const db = await initDB()
-    const tx = db.transaction(['notebooks', 'calendar_index'], 'readwrite')
-    const store = tx.objectStore('notebooks')
-    const indexStore = tx.objectStore('calendar_index')
+    const store = db.transaction('notebooks', 'readonly').objectStore('notebooks')
     
-    // Clear old index
-    await indexStore.clear()
-    
+    const fullIndex: Record<string, CalendarIndexEntry[]> = {}
     let cursor = await store.openCursor()
     
     while (cursor) {
       const nb = cursor.value
       if (nb.pages) {
         for (const page of nb.pages) {
-          // Check if page has content (simple check)
           const hasContent = (page.content && page.content.length > 0) || (page.attachments && page.attachments.length > 0)
           
           if (hasContent && page.lastModified) {
@@ -218,22 +213,25 @@ export const db = {
              if (!isNaN(d.getTime())) {
                const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
                
-               const existing = (await indexStore.get(dateKey)) || []
-               // Add entry if not duplicate
-               if (!existing.some((e: any) => e.notebookId === nb.id && e.pageNumber === page.pageNumber)) {
-                 existing.push({
-                   notebookId: nb.id,
-                   title: nb.title,
-                   pageNumber: page.pageNumber,
-                   time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                 })
-                 await indexStore.put(existing, dateKey)
-               }
+               if (!fullIndex[dateKey]) fullIndex[dateKey] = []
+               fullIndex[dateKey].push({
+                 notebookId: nb.id,
+                 title: nb.title,
+                 pageNumber: page.pageNumber,
+                 time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+               })
              }
           }
         }
       }
       cursor = await cursor.continue()
+    }
+
+    // Write all at once
+    const tx = db.transaction('calendar_index', 'readwrite')
+    await tx.objectStore('calendar_index').clear()
+    for (const [dateKey, entries] of Object.entries(fullIndex)) {
+      await tx.objectStore('calendar_index').put(entries, dateKey)
     }
     await tx.done
   },

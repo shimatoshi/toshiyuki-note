@@ -377,6 +377,7 @@ function App() {
         onDeleteNotebook={deleteNotebook}
         onCreateNotebook={handleCreateNotebook}
         onDownloadZip={handleDownloadZip}
+        onUpdateNotebook={updateNotebook}
       />
 
       <SearchOverlay 
@@ -406,12 +407,16 @@ function App() {
 
       {/* Main Editor */}
       <main className="editor-area" {...swipeHandlers}>
+        {currentNotebook.backgroundUri && (
+          <img src={currentNotebook.backgroundUri} alt="" className="watermark-layer" />
+        )}
         <textarea
           ref={textareaRef}
           value={currentPageData.content}
           onChange={(e) => handleContentChange(e.target.value)}
           placeholder={`Page ${currentNotebook.currentPage}`}
           spellCheck={false}
+          className={currentNotebook.showLines ? 'ruled' : ''}
         />
         
         <AttachmentList 

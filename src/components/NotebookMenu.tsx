@@ -1,5 +1,5 @@
-import React from 'react'
-import { FileText, Trash2, Download, PlusCircle } from 'lucide-react'
+import React, { useRef } from 'react'
+import { FileText, Trash2, Download, PlusCircle, Image as ImageIcon, Type } from 'lucide-react'
 import type { NotebookMetadata, Notebook } from '../types'
 
 interface NotebookMenuProps {
@@ -11,6 +11,7 @@ interface NotebookMenuProps {
   onDeleteNotebook: (id: string) => void
   onCreateNotebook: () => void
   onDownloadZip: () => void
+  onUpdateNotebook: (notebook: Notebook) => void
 }
 
 export const NotebookMenu: React.FC<NotebookMenuProps> = ({
@@ -21,9 +22,32 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
   onLoadNotebook,
   onDeleteNotebook,
   onCreateNotebook,
-  onDownloadZip
+  onDownloadZip,
+  onUpdateNotebook
 }) => {
+  const bgInputRef = useRef<HTMLInputElement>(null)
+  
   if (!isOpen) return null
+
+  const handleBgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!currentNotebook || !e.target.files?.[0]) return
+    const file = e.target.files[0]
+    const reader = new FileReader()
+    reader.onload = () => {
+      onUpdateNotebook({ ...currentNotebook, backgroundUri: reader.result as string }, true)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const toggleLines = () => {
+    if (!currentNotebook) return
+    onUpdateNotebook({ ...currentNotebook, showLines: !currentNotebook.showLines }, true)
+  }
+
+  const clearBg = () => {
+    if (!currentNotebook) return
+    onUpdateNotebook({ ...currentNotebook, backgroundUri: undefined }, true)
+  }
 
   return (
     <div className="menu-overlay" onClick={onClose}>
@@ -59,15 +83,38 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
           <button onClick={onCreateNotebook} className="action-btn">
             <PlusCircle size={20} /> 新しいノートを作成
           </button>
+          
+          <button onClick={toggleLines} className="action-btn">
+            <Type size={20} /> 罫線: {currentNotebook?.showLines ? 'ON' : 'OFF'}
+          </button>
+          
+          <button onClick={() => bgInputRef.current?.click()} className="action-btn">
+            <ImageIcon size={20} /> 背景画像を設定
+          </button>
+          
+          {currentNotebook?.backgroundUri && (
+            <button onClick={clearBg} className="action-btn" style={{ color: 'var(--danger-color)' }}>
+              <Trash2 size={20} /> 背景を削除
+            </button>
+          )}
+
           <button onClick={onDownloadZip} className="action-btn">
             <Download size={20} /> ZIPで保存
           </button>
+          
+          <input 
+            type="file" 
+            ref={bgInputRef} 
+            onChange={handleBgChange} 
+            accept="image/*" 
+            style={{ display: 'none' }} 
+          />
         </div>
         
-      <div className="menu-footer">
-        <p>Toshiyuki Note v1.2.0 (Calendar Fix)</p>
-        <p>&copy; 2026 Shimatoshi</p>
-      </div>
+        <div className="menu-footer">
+          <p>Toshiyuki Note v1.3.0 (Theming)</p>
+          <p>&copy; 2026 Shimatoshi</p>
+        </div>
       </div>
     </div>
   )

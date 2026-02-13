@@ -75,37 +75,44 @@ export const useNotebooks = () => {
   // Initialize
   useEffect(() => {
     const init = async () => {
-      await migrateFromLocalStorage()
-      
-      const allMetadata = await db.getAllMetadata()
-      setNotebooks(allMetadata)
+      try {
+        console.log('Starting init...')
+        // 1. DB Init
+        const allMetadata = await db.getAllMetadata().catch(() => [])
+        setNotebooks(allMetadata)
 
-      if (allMetadata.length > 0) {
-        const notebook = await db.getNotebook(allMetadata[0].id)
-        if (notebook) {
-          setCurrentNotebook(notebook)
+        if (allMetadata.length > 0) {
+          const notebook = await db.getNotebook(allMetadata[0].id).catch(() => null)
+          if (notebook) {
+            setCurrentNotebook(notebook)
+          } else {
+            await createNotebookInternal()
+          }
         } else {
           await createNotebookInternal()
         }
-      } else {
+      } catch (e) {
+        console.error('Init error:', e)
+        // Fallback: create a dummy if everything fails
         await createNotebookInternal()
+      } finally {
+        setIsLoading(false)
       }
-      
-      setIsLoading(false)
 
-      // Build index in background AFTER app is ready
-      const INDEX_BUILT_KEY = 'toshiyuki-calendar-index-v1'
-      const isIndexBuilt = localStorage.getItem(INDEX_BUILT_KEY)
-      
-      if (!isIndexBuilt) {
-        console.log('Building calendar index in background...')
-        db.rebuildCalendarIndex()
-          .then(() => {
+      // 2. Background Tasks (Migration, Indexing)
+      setTimeout(async () => {
+        try {
+          await migrateFromLocalStorage()
+          
+          const INDEX_BUILT_KEY = 'toshiyuki-calendar-index-v1'
+          if (!localStorage.getItem(INDEX_BUILT_KEY)) {
+            await db.rebuildCalendarIndex()
             localStorage.setItem(INDEX_BUILT_KEY, 'true')
-            console.log('Calendar index built successfully')
-          })
-          .catch(e => console.error('Background index build failed', e))
-      }
+          }
+        } catch (e) {
+          console.error('Background task error:', e)
+        }
+      }, 1000)
     }
 
     init()

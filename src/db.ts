@@ -28,7 +28,7 @@ const DB_VERSION = 2 // Increment version
 
 let dbPromise: Promise<IDBPDatabase<ToshiyukiDB>>
 
-export const initDB = () => {
+export const initDB = async () => {
   if (!dbPromise) {
     dbPromise = openDB<ToshiyukiDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion, newVersion, transaction) {
@@ -42,6 +42,9 @@ export const initDB = () => {
           db.createObjectStore('calendar_index')
         }
       },
+    }).catch(err => {
+      console.error('Failed to open IndexedDB:', err)
+      throw err
     })
   }
   return dbPromise
@@ -49,10 +52,20 @@ export const initDB = () => {
 
 export const db = {
   async getAllMetadata(): Promise<NotebookMetadata[]> {
-    const db = await initDB()
-    // Sort by lastModified desc manually if needed, or use index in future
-    const all = await db.getAll('metadata')
-    return all.sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
+    try {
+      const db = await initDB()
+      const all = await db.getAll('metadata')
+      return all.sort((a, b) => {
+        try {
+          return new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+        } catch (e) {
+          return 0
+        }
+      })
+    } catch (e) {
+      console.error('getAllMetadata error', e)
+      return []
+    }
   },
 
   async getNotebook(id: string): Promise<Notebook | undefined> {

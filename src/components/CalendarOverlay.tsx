@@ -28,12 +28,11 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   const [monthlyActivity, setMonthlyActivity] = useState<Record<string, boolean>>({})
   const [dailyDetails, setDailyDetails] = useState<Record<string, ActivityItem[]>>({})
   const [isLoading, setIsLoading] = useState(false)
-
-  if (!isOpen) return null
+  const [error, setError] = useState<string | null>(null)
 
   // Calendar Logic
   const year = currentDate.getFullYear()
-  const month = currentDate.getMonth() // 0-based
+  const month = currentDate.getMonth()
 
   const firstDayOfMonth = new Date(year, month, 1)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -47,22 +46,27 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
     days.push(new Date(year, month, i))
   }
 
-  // Fetch data when month changes
   useEffect(() => {
     if (!isOpen) return
 
+    let isMounted = true
     setIsLoading(true)
-    // Month needs to be 1-based for DB query logic if designed so, but my DB logic used YYYY-MM
-    // DB logic uses String(month).padStart(2, '0').
-    // Wait, DB logic received `month` as number.
-    // If I pass `month + 1`, then padStart(2, '0') makes '02' for Feb. Correct.
+    setError(null)
     
     fetchMonthlyData(year, month + 1)
       .then(items => {
+        if (!isMounted) return
+        if (!Array.isArray(items)) {
+            setMonthlyActivity({})
+            setDailyDetails({})
+            return
+        }
+
         const newActivity: Record<string, boolean> = {}
         const newDetails: Record<string, ActivityItem[]> = {}
         
         items.forEach(item => {
+          if (!item || !item.date) return
           newActivity[item.date] = true
           if (!newDetails[item.date]) newDetails[item.date] = []
           newDetails[item.date].push(item)
@@ -73,10 +77,16 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
         setIsLoading(false)
       })
       .catch(err => {
-        console.error(err)
+        if (!isMounted) return
+        console.error('Calendar Fetch Error:', err)
+        setError('データの読み込みに失敗しました')
         setIsLoading(false)
       })
+
+    return () => { isMounted = false }
   }, [year, month, isOpen, fetchMonthlyData])
+
+  if (!isOpen) return null
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1))
@@ -100,7 +110,7 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   const selectedActivities = selectedDate ? dailyDetails[selectedDate] : []
 
   return (
-    <div className="overlay-container" onClick={onClose}>
+    <div className="overlay-container" onClick={onClose} style={{ zIndex: 9999 }}>
       <div className="overlay-content calendar-content" onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
           <h2>カレンダー</h2>
@@ -117,7 +127,9 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
           <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
         </div>
         
-        {isLoading ? (
+        {error ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--danger-color)' }}>{error}</div>
+        ) : isLoading ? (
             <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>読み込み中...</div>
         ) : (
             <div className="calendar-grid">
@@ -144,7 +156,7 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
         )}
         
         {selectedDate && selectedActivities && selectedActivities.length > 0 && (
-          <div className="activity-list">
+          <div className="activity-list" style={{ maxHeight: '200px', overflowY: 'auto' }}>
             <h3>{selectedDate} の記録</h3>
             <div className="activity-items">
               {selectedActivities.map((item, idx) => (
@@ -155,10 +167,11 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
                     onJumpToPage(item.notebookId, item.pageNumber)
                     onClose()
                   }}
+                  style={{ cursor: 'pointer' }}
                 >
                   <FileText size={16} style={{ color: 'var(--accent-color)' }} />
                   <div className="activity-info">
-                    <span className="activity-title">{item.title}</span>
+                    <span className="activity-title">{item.title || '無題'}</span>
                     <span className="activity-meta">Page {item.pageNumber} • {item.time}</span>
                   </div>
                 </div>

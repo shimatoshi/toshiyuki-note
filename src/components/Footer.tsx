@@ -1,26 +1,24 @@
 import React, { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Paperclip, MapPin, FileUp, Clock } from 'lucide-react'
+import { Paperclip, MapPin, FileUp, Clock, Search, Calendar } from 'lucide-react'
 
 interface FooterProps {
   currentPage: number
   totalPages: number
-  onPrevPage: () => void
-  onNextPage: () => void
   onAddAttachment: (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => void
   onAddTimestamp: () => void
   onAddLocation: () => void
-  isNextDisabled: boolean
+  onToggleSearch: () => void
+  onToggleCalendar: () => void
 }
 
 export const Footer: React.FC<FooterProps> = ({
   currentPage,
   totalPages,
-  onPrevPage,
-  onNextPage,
   onAddAttachment,
   onAddTimestamp,
   onAddLocation,
-  isNextDisabled
+  onToggleSearch,
+  onToggleCalendar
 }) => {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -34,6 +32,15 @@ export const Footer: React.FC<FooterProps> = ({
       </div>
 
       <div className="footer-center">
+         <button className="icon-btn" onClick={onToggleCalendar}>
+           <Calendar size={24} />
+         </button>
+         <button className="icon-btn" onClick={onToggleSearch}>
+           <Search size={24} />
+         </button>
+
+         <div className="v-divider" />
+
          <input 
            type="file" 
            ref={imageInputRef} 
@@ -45,7 +52,7 @@ export const Footer: React.FC<FooterProps> = ({
            }}
          />
          <button className="icon-btn" onClick={() => imageInputRef.current?.click()}>
-           <Paperclip size={20} />
+           <Paperclip size={24} />
          </button>
 
          <input 
@@ -58,34 +65,16 @@ export const Footer: React.FC<FooterProps> = ({
            }}
          />
          <button className="icon-btn" onClick={() => fileInputRef.current?.click()}>
-           <FileUp size={20} />
+           <FileUp size={24} />
          </button>
 
          <button className="icon-btn" onClick={onAddTimestamp}>
-           <Clock size={20} />
+           <Clock size={24} />
          </button>
          
          <button className="icon-btn" onClick={onAddLocation}>
-           <MapPin size={20} />
+           <MapPin size={24} />
          </button>
-      </div>
-
-      <div className="nav-buttons">
-        <button 
-          className="nav-btn" 
-          disabled={currentPage === 1}
-          onClick={onPrevPage}
-        >
-          <ChevronLeft size={24} />
-        </button>
-        
-        <button 
-          className="nav-btn"
-          disabled={isNextDisabled} 
-          onClick={onNextPage}
-        >
-          <ChevronRight size={24} />
-        </button>
       </div>
     </footer>
   )

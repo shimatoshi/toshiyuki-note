@@ -428,12 +428,11 @@ function App() {
       <Footer 
         currentPage={currentNotebook.currentPage}
         totalPages={TOTAL_PAGES}
-        onPrevPage={() => handlePageChange(currentNotebook.currentPage - 1)}
-        onNextPage={handleNextPage}
         onAddAttachment={handleAddAttachment}
         onAddTimestamp={handleAddTimestamp}
         onAddLocation={handleAddLocation}
-        isNextDisabled={isLastPage && !currentPageData.content}
+        onToggleSearch={() => setIsSearchOpen(true)}
+        onToggleCalendar={handleOpenCalendar}
       />
     </div>
   )

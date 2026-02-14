@@ -66,12 +66,6 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="header-right">
-        <button className="icon-btn" onClick={onToggleCalendar}>
-          <Calendar size={24} />
-        </button>
-        <button className="icon-btn" onClick={onToggleSearch}>
-          <Search size={24} />
-        </button>
         <button className="icon-btn" onClick={onToggleMenu}>
           <Menu size={24} />
         </button>

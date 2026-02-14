@@ -131,7 +131,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.15; /* Subtle watermark */
+  opacity: 0.25; /* Slightly more visible but still a watermark */
   pointer-events: none;
   z-index: 0;
 }
@@ -155,7 +155,7 @@ textarea {
 
 /* Ruled Lines */
 textarea.ruled {
-  background-image: linear-gradient(var(--border-color) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
   background-size: 100% 2.0em; /* Matches line-height (2.0) */
   background-attachment: local;
 }

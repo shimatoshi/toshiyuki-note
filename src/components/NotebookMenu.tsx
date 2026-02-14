@@ -112,7 +112,7 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
         </div>
         
         <div className="menu-footer">
-          <p>Toshiyuki Note v1.3.0 (Theming)</p>
+          <p>Toshiyuki Note v1.3.1 (Theming Fix)</p>
           <p>&copy; 2026 Shimatoshi</p>
         </div>
       </div>

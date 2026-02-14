@@ -1,19 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { Menu, Search, Edit2, Check, X, Calendar } from 'lucide-react'
+import { Menu, Edit2, Check, X } from 'lucide-react'
 
 interface HeaderProps {
   title: string
   onToggleMenu: () => void
-  onToggleSearch: () => void
-  onToggleCalendar: () => void
   onRename: (newTitle: string) => void
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
   title, 
   onToggleMenu, 
-  onToggleSearch, 
-  onToggleCalendar,
   onRename 
 }) => {
   const [isRenaming, setIsRenaming] = useState(false)

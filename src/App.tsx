@@ -355,7 +355,6 @@ function App() {
   if (isLoading || !currentNotebook) return <div className="loading">Loading...</div>
 
   const currentPageData = currentNotebook.pages[currentNotebook.currentPage - 1]
-  const isLastPage = currentNotebook.currentPage === TOTAL_PAGES
   const attachments = currentPageData.attachments || []
 
   return (
@@ -363,8 +362,6 @@ function App() {
       <Header 
         title={currentNotebook.title}
         onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
-        onToggleSearch={() => setIsSearchOpen(true)}
-        onToggleCalendar={handleOpenCalendar}
         onRename={handleRename}
       />
 

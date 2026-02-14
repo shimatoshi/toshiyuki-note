@@ -7,11 +7,11 @@ interface NotebookMenuProps {
   onClose: () => void
   notebooks: NotebookMetadata[]
   currentNotebook: Notebook | null
-  onLoadNotebook: (id: string) => void
+  onLoadNotebook: (id: string, targetPage?: number) => void
   onDeleteNotebook: (id: string) => void
   onCreateNotebook: () => void
   onDownloadZip: () => void
-  onUpdateNotebook: (notebook: Notebook) => void
+  onUpdateNotebook: (notebook: Notebook, immediate?: boolean) => void
 }
 
 export const NotebookMenu: React.FC<NotebookMenuProps> = ({
@@ -112,7 +112,25 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
         </div>
         
         <div className="menu-footer">
-          <p>Toshiyuki Note v1.3.1 (Theming Fix)</p>
+          <p>Toshiyuki Note v1.3.2 (Force Update)</p>
+          <button 
+            onClick={() => {
+              if (window.confirm('キャッシュをクリアしてアプリを再起動しますか？')) {
+                window.location.reload();
+              }
+            }}
+            style={{ 
+              background: 'none', 
+              border: '1px solid #444', 
+              color: '#888', 
+              fontSize: '10px', 
+              padding: '2px 8px', 
+              marginTop: '5px',
+              borderRadius: '4px'
+            }}
+          >
+            アプリを強制更新
+          </button>
           <p>&copy; 2026 Shimatoshi</p>
         </div>
       </div>

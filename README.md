@@ -1,73 +1,44 @@
-# React + TypeScript + Vite
+# としゆきノート (Toshiyuki Note)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+モバイル・ファーストで設計された、完全オフライン対応の強力なサバイバル・ノートアプリです。
+電波のない場所でも記録を絶やさず、位置情報や画像と共に日常や業務のログを残すことができます。
 
-Currently, two official plugins are available:
+## ✨ 特徴
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **📱 モバイル専用設計:** 片手で操作しやすいUI。iOS 12.5.7などの古い端末から最新のiPhone/Androidまで幅広く対応。
+- **🌐 完全オフライン対応:** データはすべて端末内のIndexedDBに保存。機内モードでもノートの読み書き、画像の表示、検索が可能です。
+- **🗺️ 高度な位置情報ログ:** 
+  - GPS座標の記録（オフライン可）。
+  - オンライン時は住所（字・丁目レベルまで）を自動取得。
+  - ワンタップでGoogle Mapsへジャンプ。
+- **📅 爆速カレンダー:** 
+  - 記録がある日をドットで可視化。
+  - 軽量なインデックス（目次）方式により、数年分のデータがあっても一瞬で開けます。
+- **🖇️ 添付ファイル機能:** 画像やファイルをページに添付。本文中に `(画像1)` のように参照を挿入でき、整理が簡単。
+- **🎨 カスタマイズ:** 
+  - **罫線モード:** 文字が書きやすいノート風の罫線を表示。
+  - **透かし背景:** お気に入りの画像をエディタの背景にうっすらと配置可能。
+- **🔍 全文検索:** 全ノートの全ページから瞬時に目的の記述を探し出せます。
+- **📦 保存と移行:** ノート単位でZIP形式としてエクスポート可能。
 
-## React Compiler
+## 🛠️ 技術スタック
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend:** React + TypeScript + Vite
+- **Storage:** IndexedDB (idbライブラリ使用)
+- **Icons:** Lucide React
+- **PWA:** Vite PWA Plugin
+- **Deployment:** Vercel
 
-## Expanding the ESLint configuration
+## 🚀 使い方
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+1. **アクセス:** VercelのURLにアクセスします。
+2. **インストール:** ブラウザのメニューから「ホーム画面に追加」を選択すると、アプリとしてオフラインでも快適に使えるようになります。
+3. **ノート作成:** 右上のメニューから新しいノートを作成（1冊50ページ構成）。
+4. **記録:** テキスト入力、タイムスタンプ挿入、位置情報取得、写真添付を組み合わせて記録します。
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 🔒 プライバシー
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+本アプリは**サーバーにデータを一切送信しません。** すべての記録はあなたのブラウザ内のみに保持されます。
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---
+&copy; 2026 Shimatoshi

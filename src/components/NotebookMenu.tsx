@@ -1,6 +1,14 @@
-import React, { useRef } from 'react'
-import { FileText, Trash2, Download, PlusCircle, Image as ImageIcon, Type } from 'lucide-react'
+import React, { useRef, useState } from 'react'
+import { FileText, Trash2, Download, PlusCircle, Image as ImageIcon, Type, LogIn, LogOut, Cloud } from 'lucide-react'
 import type { NotebookMetadata, Notebook } from '../types'
+
+interface SyncInfo {
+  isConnected: boolean
+  profileName: string | null
+  supabaseAvailable: boolean
+  onLogin: (email: string, password: string) => Promise<string | null>
+  onLogout: () => void
+}
 
 interface NotebookMenuProps {
   isOpen: boolean
@@ -12,6 +20,7 @@ interface NotebookMenuProps {
   onCreateNotebook: () => void
   onDownloadZip: () => void
   onUpdateNotebook: (notebook: Notebook, immediate?: boolean) => void
+  sync?: SyncInfo
 }
 
 export const NotebookMenu: React.FC<NotebookMenuProps> = ({
@@ -23,9 +32,14 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
   onDeleteNotebook,
   onCreateNotebook,
   onDownloadZip,
-  onUpdateNotebook
+  onUpdateNotebook,
+  sync
 }) => {
   const bgInputRef = useRef<HTMLInputElement>(null)
+  const [showLogin, setShowLogin] = useState(false)
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState<string | null>(null)
   
   if (!isOpen) return null
 
@@ -102,15 +116,69 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
             <Download size={20} /> ZIPで保存
           </button>
           
-          <input 
-            type="file" 
-            ref={bgInputRef} 
-            onChange={handleBgChange} 
-            accept="image/*" 
-            style={{ display: 'none' }} 
+          <input
+            type="file"
+            ref={bgInputRef}
+            onChange={handleBgChange}
+            accept="image/*"
+            style={{ display: 'none' }}
           />
         </div>
-        
+
+        {sync?.supabaseAvailable && (
+          <div className="menu-actions" style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+            <h3 style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+              としゆきアカウント
+            </h3>
+            {sync.isConnected ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', fontSize: 14, color: 'var(--accent-color)' }}>
+                  <Cloud size={16} /> {sync.profileName} (連携中)
+                </div>
+                <button onClick={sync.onLogout} className="action-btn" style={{ color: 'var(--danger-color)' }}>
+                  <LogOut size={20} /> ログアウト
+                </button>
+              </>
+            ) : showLogin ? (
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                setLoginError(null)
+                const err = await sync.onLogin(loginEmail, loginPassword)
+                if (err) setLoginError(err)
+                else { setShowLogin(false); setLoginEmail(''); setLoginPassword('') }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={e => setLoginEmail(e.target.value)}
+                  placeholder="メールアドレス"
+                  required
+                  style={{ background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '10px', borderRadius: 6, fontSize: 16 }}
+                />
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  placeholder="パスワード"
+                  required
+                  style={{ background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '10px', borderRadius: 6, fontSize: 16 }}
+                />
+                {loginError && <div style={{ color: 'var(--danger-color)', fontSize: 13 }}>{loginError}</div>}
+                <button type="submit" className="action-btn" style={{ justifyContent: 'center' }}>
+                  ログイン
+                </button>
+                <button type="button" onClick={() => setShowLogin(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
+                  キャンセル
+                </button>
+              </form>
+            ) : (
+              <button onClick={() => setShowLogin(true)} className="action-btn">
+                <LogIn size={20} /> カレンダーと連携
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="menu-footer">
           <p>Toshiyuki Note v1.3.2 (Force Update)</p>
           <button 

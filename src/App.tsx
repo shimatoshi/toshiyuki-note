@@ -4,6 +4,7 @@ import { saveAs } from 'file-saver'
 import { useSwipeable } from 'react-swipeable'
 import { v4 as uuidv4 } from 'uuid'
 import { useNotebooks } from './hooks/useNotebooks'
+import { useSync } from './hooks/useSync'
 import { reverseGeocode, formatAddress } from './utils/geocoding'
 import type { Attachment } from './types'
 import './styles/global.css'
@@ -20,17 +21,22 @@ import { CalendarOverlay } from './components/CalendarOverlay'
 const TOTAL_PAGES = 50
 
 function App() {
-  const { 
-    notebooks, 
-    currentNotebook, 
-    isLoading, 
-    createNotebook, 
-    loadNotebook, 
+  const {
+    notebooks,
+    currentNotebook,
+    isLoading,
+    createNotebook,
+    loadNotebook,
     deleteNotebook,
     updateNotebook,
     searchNotebooks,
     getMonthlyActivity
   } = useNotebooks()
+
+  const {
+    profile, isConnected, supabaseAvailable,
+    handleLogin, handleLogout, syncNoteRecord,
+  } = useSync()
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -75,7 +81,13 @@ function App() {
       lastModified: new Date().toISOString(),
     }
 
-    updateNotebook({ ...currentNotebook, pages: newPages })
+    const updatedNotebook = { ...currentNotebook, pages: newPages }
+    updateNotebook(updatedNotebook)
+
+    // カレンダー連携: ログイン中ならnote_recordsを同期
+    if (isConnected) {
+      syncNoteRecord(updatedNotebook, pageIndex)
+    }
   }
 
   const handleRename = (newTitle: string) => {
@@ -365,7 +377,7 @@ function App() {
         onRename={handleRename}
       />
 
-      <NotebookMenu 
+      <NotebookMenu
         isOpen={isMenuOpen}
         onClose={() => setIsMenuOpen(false)}
         notebooks={notebooks}
@@ -375,6 +387,13 @@ function App() {
         onCreateNotebook={handleCreateNotebook}
         onDownloadZip={handleDownloadZip}
         onUpdateNotebook={updateNotebook}
+        sync={{
+          isConnected,
+          profileName: profile?.display_name ?? null,
+          supabaseAvailable,
+          onLogin: handleLogin,
+          onLogout: handleLogout,
+        }}
       />
 
       <SearchOverlay 

@@ -1,5 +1,63 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import type { Notebook, NotebookMetadata } from './types'
+import type { Notebook, NotebookMetadata, Attachment } from './types'
+
+// --- Blob <-> Base64 変換ユーティリティ ---
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+function base64ToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(',')
+  const mime = header.match(/:(.*?);/)?.[1] || 'application/octet-stream'
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: mime })
+}
+
+// 保存前: Blob → Base64文字列に変換
+async function serializeAttachments(notebook: Notebook): Promise<Notebook> {
+  const serializedPages = await Promise.all(
+    notebook.pages.map(async page => {
+      if (!page.attachments || page.attachments.length === 0) return page
+
+      const serializedAttachments = await Promise.all(
+        page.attachments.map(async (att): Promise<Attachment> => {
+          if (att.data instanceof Blob) {
+            return { ...att, data: await blobToBase64(att.data) }
+          }
+          return att
+        })
+      )
+      return { ...page, attachments: serializedAttachments }
+    })
+  )
+  return { ...notebook, pages: serializedPages }
+}
+
+// 読み出し後: Base64文字列 → Blobに復元
+function deserializeAttachments(notebook: Notebook): Notebook {
+  const restoredPages = notebook.pages.map(page => {
+    if (!page.attachments || page.attachments.length === 0) return page
+
+    const restoredAttachments = page.attachments.map((att): Attachment => {
+      if (typeof att.data === 'string' && att.data.startsWith('data:') && (att.type === 'image' || att.type === 'file')) {
+        return { ...att, data: base64ToBlob(att.data) }
+      }
+      return att
+    })
+    return { ...page, attachments: restoredAttachments }
+  })
+  return { ...notebook, pages: restoredPages }
+}
 
 interface CalendarIndexEntry {
   notebookId: string
@@ -70,15 +128,18 @@ export const db = {
 
   async getNotebook(id: string): Promise<Notebook | undefined> {
     const db = await initDB()
-    return db.get('notebooks', id)
+    const notebook = await db.get('notebooks', id)
+    if (!notebook) return undefined
+    return deserializeAttachments(notebook)
   },
 
   async saveNotebook(notebook: Notebook): Promise<void> {
+    const serialized = await serializeAttachments(notebook)
     const db = await initDB()
     const tx = db.transaction(['notebooks', 'metadata', 'calendar_index'], 'readwrite')
-    
-    // Save full notebook
-    await tx.objectStore('notebooks').put(notebook)
+
+    // Save full notebook (with Base64 attachments)
+    await tx.objectStore('notebooks').put(serialized)
     
     // Update metadata
     await tx.objectStore('metadata').put({

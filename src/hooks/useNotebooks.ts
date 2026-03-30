@@ -98,15 +98,27 @@ export const useNotebooks = () => {
         setIsLoading(false)
       }
 
-      // 2. Background Tasks (Migration, Indexing)
+      // 2. Background Tasks (Migration, Indexing, Storage Check)
       setTimeout(async () => {
         try {
           await migrateFromLocalStorage()
-          
+
           const INDEX_BUILT_KEY = 'toshiyuki-calendar-index-v1'
           if (!localStorage.getItem(INDEX_BUILT_KEY)) {
             await db.rebuildCalendarIndex()
             localStorage.setItem(INDEX_BUILT_KEY, 'true')
+          }
+
+          // ストレージ残量チェック
+          if (navigator.storage && navigator.storage.estimate) {
+            const estimate = await navigator.storage.estimate()
+            if (estimate.quota && estimate.usage) {
+              const usagePercent = (estimate.usage / estimate.quota) * 100
+              const remainingMB = Math.round((estimate.quota - estimate.usage) / 1024 / 1024)
+              if (usagePercent > 80) {
+                alert(`ストレージの残り容量が少なくなっています（残り約${remainingMB}MB）。\n不要なノートを削除するか、ZIPで保存してからデータを整理してください。`)
+              }
+            }
           }
         } catch (e) {
           console.error('Background task error:', e)

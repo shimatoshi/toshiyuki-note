@@ -132,24 +132,23 @@ export const db = {
     await tx.done
   },
   
-  // New efficient method
-  async getCalendarIndex(year: number, month: number): Promise<any[]> {
+  async getCalendarIndex(year: number, month: number): Promise<Array<{ date: string } & CalendarIndexEntry>> {
     const db = await initDB()
     const startKey = `${year}-${String(month).padStart(2, '0')}-01`
     const endKey = `${year}-${String(month).padStart(2, '0')}-31`
     const range = IDBKeyRange.bound(startKey, endKey)
-    
+
     const keys = await db.getAllKeys('calendar_index', range)
-    const results: any[] = []
-    
+    const results: Array<{ date: string } & CalendarIndexEntry> = []
+
     for (const key of keys) {
       const entries = await db.get('calendar_index', key)
       if (entries) {
-        entries.forEach((e: any) => {
-           results.push({
-             date: key as string, // key is date string
-             ...e
-           })
+        entries.forEach(e => {
+          results.push({
+            date: key as string,
+            ...e
+          })
         })
       }
     }
@@ -160,49 +159,6 @@ export const db = {
   async saveMetadata(metadata: NotebookMetadata): Promise<void> {
     const db = await initDB()
     await db.put('metadata', metadata)
-  },
-
-  async getNotebooksForCalendar(): Promise<Notebook[]> {
-    // Deprecated: keeping for compatibility if needed, but switching to monthly fetch
-    return [] 
-  },
-
-  async getCalendarMonthData(year: number, month: number): Promise<Array<{ date: string, notebookId: string, title: string, pageNumber: number, time: string }>> {
-    const db = await initDB()
-    const tx = db.transaction('notebooks', 'readonly')
-    const store = tx.objectStore('notebooks')
-    
-    const results: Array<{ date: string, notebookId: string, title: string, pageNumber: number, time: string }> = []
-    const targetPrefix = `${year}-${String(month).padStart(2, '0')}` // YYYY-MM
-    
-    let cursor = await store.openCursor()
-    
-    while (cursor) {
-      const nb = cursor.value
-      // Check each page
-      for (const p of nb.pages) {
-        if (p.lastModified && p.lastModified.startsWith(targetPrefix)) {
-          // Check if it has content
-          const hasContent = (p.content && p.content.trim().length > 0) || (p.attachments && p.attachments.length > 0)
-          
-          if (hasContent) {
-            const d = new Date(p.lastModified)
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            
-            results.push({
-              date: dateStr,
-              notebookId: nb.id,
-              title: nb.title,
-              pageNumber: p.pageNumber,
-              time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            })
-          }
-        }
-      }
-      cursor = await cursor.continue()
-    }
-    
-    return results
   },
 
   async rebuildCalendarIndex(): Promise<void> {
@@ -260,11 +216,13 @@ export const db = {
     const notebooks = await db.getAll('notebooks')
     const results: { notebookId: string; title: string; pageNumber: number; snippet: string }[] = []
 
+    const lowerQuery = query.toLowerCase()
     for (const notebook of notebooks) {
       for (const page of notebook.pages) {
-        if (page.content.includes(query)) {
+        const lowerContent = page.content.toLowerCase()
+        if (lowerContent.includes(lowerQuery)) {
           // Extract snippet
-          const index = page.content.indexOf(query)
+          const index = lowerContent.indexOf(lowerQuery)
           const start = Math.max(0, index - 20)
           const end = Math.min(page.content.length, index + query.length + 20)
           const snippet = (start > 0 ? '...' : '') + page.content.slice(start, end) + (end < page.content.length ? '...' : '')

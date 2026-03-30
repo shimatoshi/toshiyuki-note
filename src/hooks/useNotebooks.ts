@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { TOTAL_PAGES } from '../types'
 import type { Notebook, NotebookMetadata, Page } from '../types'
 import { db } from '../db'
-
-const TOTAL_PAGES = 50
 // Old keys for migration
 const LEGACY_METADATA_KEY = 'toshiyuki-notebooks-metadata'
 const LEGACY_NOTEBOOK_PREFIX = 'toshiyuki-notebook-'
@@ -176,10 +175,10 @@ export const useNotebooks = () => {
   const updateNotebook = async (notebook: Notebook, immediate = false) => {
     // 1. UIを即座に更新 (サクサク感)
     setCurrentNotebook(notebook)
-    
+
     // 2. メタデータリストの更新 (タイトル変更時などのため)
-    setNotebooks(prev => prev.map(n => 
-      n.id === notebook.id 
+    setNotebooks(prev => prev.map(n =>
+      n.id === notebook.id
         ? { ...n, title: notebook.title, lastModified: new Date().toISOString() }
         : n
     ))
@@ -192,54 +191,51 @@ export const useNotebooks = () => {
       const timerId = `save-${notebook.id}`
       const existingTimer = (window as any)[timerId]
       if (existingTimer) clearTimeout(existingTimer);
-      
+
       (window as any)[timerId] = setTimeout(async () => {
         await db.saveNotebook(notebook)
         delete (window as any)[timerId]
       }, 1000) // 1秒間入力が止まったら保存
     }
   }
-    
-    
-    
-            const searchNotebooks = async (query: string) => {
-    
-    
-    
-              return await db.searchAllNotebooks(query)
-    
-    
-    
-            }
-    
-    
-    
-          
-    
-    
-    
-              const getCalendarData = useCallback(async () => {
-                return [] // No longer used
-              }, [])
-            
-                const getMonthlyActivity = useCallback(async (year: number, month: number) => {
-                  try {
-                    return await db.getCalendarIndex(year, month)
-                  } catch (e) {
-                    console.error('Failed to get monthly activity', e)
-                    return []
-                  }
-                }, [])            
-              return {
-                notebooks,
-                currentNotebook,
-                isLoading,
-                createNotebook,
-                loadNotebook,
-                deleteNotebook,
-                updateNotebook,
-                searchNotebooks,
-                getCalendarData,
-                getMonthlyActivity
-              }
-            }    
+
+  const importNotebook = async (notebook: Notebook) => {
+    await db.saveNotebook(notebook)
+
+    const newMeta: NotebookMetadata = {
+      id: notebook.id,
+      title: notebook.title,
+      createdAt: notebook.createdAt,
+      lastModified: new Date().toISOString()
+    }
+
+    setNotebooks(prev => [newMeta, ...prev])
+    setCurrentNotebook(notebook)
+  }
+
+  const searchNotebooks = async (query: string) => {
+    return await db.searchAllNotebooks(query)
+  }
+
+  const getMonthlyActivity = useCallback(async (year: number, month: number) => {
+    try {
+      return await db.getCalendarIndex(year, month)
+    } catch (e) {
+      console.error('Failed to get monthly activity', e)
+      return []
+    }
+  }, [])
+
+  return {
+    notebooks,
+    currentNotebook,
+    isLoading,
+    createNotebook,
+    loadNotebook,
+    deleteNotebook,
+    updateNotebook,
+    importNotebook,
+    searchNotebooks,
+    getMonthlyActivity
+  }
+}    

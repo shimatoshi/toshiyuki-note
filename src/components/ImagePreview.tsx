@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo, useEffect } from 'react'
 import { X, Trash2, File, MapPin } from 'lucide-react'
 import type { Attachment } from '../types'
 
@@ -9,15 +9,24 @@ interface ImagePreviewProps {
 }
 
 export const ImagePreview: React.FC<ImagePreviewProps> = ({ attachment, onClose, onDelete }) => {
+  const imageUrl = useMemo(() => {
+    if (attachment?.type === 'image' && attachment.data instanceof Blob) {
+      return URL.createObjectURL(attachment.data)
+    }
+    return null
+  }, [attachment])
+
+  useEffect(() => {
+    return () => {
+      if (imageUrl) URL.revokeObjectURL(imageUrl)
+    }
+  }, [imageUrl])
+
   if (!attachment) return null
 
-  const getImageUrl = (data: Blob) => {
-    return URL.createObjectURL(data)
-  }
-
   const renderContent = () => {
-    if (attachment.type === 'image') {
-      return <img src={getImageUrl(attachment.data as Blob)} alt="Preview" />
+    if (attachment.type === 'image' && imageUrl) {
+      return <img src={imageUrl} alt="Preview" />
     } else if (attachment.type === 'location') {
       const { latitude, longitude } = attachment.data as any
       const mapUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
@@ -27,7 +36,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ attachment, onClose,
           <h3 style={{ marginBottom: 8 }}>{attachment.name}</h3>
           <p style={{ fontSize: '0.9em', opacity: 0.8, marginBottom: 4 }}>Lat: {latitude}</p>
           <p style={{ fontSize: '0.9em', opacity: 0.8 }}>Lng: {longitude}</p>
-          
+
           <a href={mapUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#bb86fc', display: 'block', marginTop: 24, fontSize: '1.1em', fontWeight: 'bold' }}>
             Google Mapsで開く
           </a>

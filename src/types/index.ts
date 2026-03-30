@@ -1,3 +1,5 @@
+export const TOTAL_PAGES = 50
+
 export interface Attachment {
   id: string;
   type: 'image' | 'file' | 'location';

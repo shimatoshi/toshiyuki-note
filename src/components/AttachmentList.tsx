@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo, useEffect } from 'react'
 import type { Attachment } from '../types'
 import { File, MapPin } from 'lucide-react'
 
@@ -10,9 +10,22 @@ interface AttachmentListProps {
 export const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, onPreview }) => {
   if (!attachments || attachments.length === 0) return null
 
-  const getImageUrl = (data: Blob) => {
-    return URL.createObjectURL(data)
-  }
+  // ObjectURLをまとめて生成し、アンマウント時にrevokeする
+  const imageUrls = useMemo(() => {
+    const urls: Record<string, string> = {}
+    attachments.forEach(att => {
+      if (att.type === 'image' && att.data instanceof Blob) {
+        urls[att.id] = URL.createObjectURL(att.data)
+      }
+    })
+    return urls
+  }, [attachments])
+
+  useEffect(() => {
+    return () => {
+      Object.values(imageUrls).forEach(url => URL.revokeObjectURL(url))
+    }
+  }, [imageUrls])
 
   return (
     <div className="attachments-area">
@@ -20,7 +33,7 @@ export const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, onP
         <div key={att.id} className="attachment-item" onClick={() => onPreview(att)}>
           {att.type === 'image' ? (
             <>
-              <img src={getImageUrl(att.data as Blob)} alt="attachment" className="attachment-thumb" />
+              <img src={imageUrls[att.id]} alt="attachment" className="attachment-thumb" />
               <span className="attachment-badge">{idx + 1}</span>
             </>
           ) : att.type === 'location' ? (

@@ -6,7 +6,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { useNotebooks } from './hooks/useNotebooks'
 import { useSync } from './hooks/useSync'
 import { reverseGeocode, formatAddress } from './utils/geocoding'
-import type { Attachment } from './types'
+import { TOTAL_PAGES } from './types'
+import type { Attachment, Page, Notebook } from './types'
 import './styles/global.css'
 
 // Components
@@ -18,8 +19,6 @@ import { ImagePreview } from './components/ImagePreview'
 import { AttachmentList } from './components/AttachmentList'
 import { CalendarOverlay } from './components/CalendarOverlay'
 
-const TOTAL_PAGES = 50
-
 function App() {
   const {
     notebooks,
@@ -29,6 +28,7 @@ function App() {
     loadNotebook,
     deleteNotebook,
     updateNotebook,
+    importNotebook,
     searchNotebooks,
     getMonthlyActivity
   } = useNotebooks()
@@ -269,12 +269,15 @@ function App() {
     setPreviewImage(null)
   }
 
-  // Action: Download
+  // Action: Download (with notebook.json manifest)
   const handleDownloadZip = async () => {
     if (!currentNotebook) return
 
     const zip = new JSZip()
     let hasContent = false
+
+    // マニフェスト用: 添付ファイルのパスマッピング
+    const attachmentFiles: Record<string, string> = {} // attachmentId -> zipPath
 
     currentNotebook.pages.forEach((page) => {
       // Text content
@@ -285,19 +288,25 @@ function App() {
         zip.file(filename, page.content)
         hasContent = true
       }
-      
+
       // Attachments
       if (page.attachments && page.attachments.length > 0) {
-         page.attachments.forEach((att, idx) => {
-           if (att.type === 'image' && att.data instanceof Blob) {
-             const date = new Date(page.lastModified)
-             const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
-             const ext = att.name ? att.name.split('.').pop() : 'png'
-             const filename = `images/${String(page.pageNumber).padStart(3, '0')}_${dateStr}_${idx + 1}.${ext}`
-             zip.file(filename, att.data)
-             hasContent = true
-           }
-         })
+        page.attachments.forEach((att, idx) => {
+          if (att.type === 'image' && att.data instanceof Blob) {
+            const date = new Date(page.lastModified)
+            const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
+            const ext = att.name ? att.name.split('.').pop() : 'png'
+            const filepath = `attachments/${String(page.pageNumber).padStart(3, '0')}_${dateStr}_${idx + 1}.${ext}`
+            zip.file(filepath, att.data)
+            attachmentFiles[att.id] = filepath
+            hasContent = true
+          } else if (att.type === 'file' && att.data instanceof Blob) {
+            const filepath = `attachments/${att.id}_${att.name || 'file'}`
+            zip.file(filepath, att.data)
+            attachmentFiles[att.id] = filepath
+            hasContent = true
+          }
+        })
       }
     })
 
@@ -306,9 +315,123 @@ function App() {
       return
     }
 
+    // マニフェスト: ノート構造を保存（Blobは除外、パス参照に置換）
+    const manifest = {
+      version: 1,
+      title: currentNotebook.title,
+      createdAt: currentNotebook.createdAt,
+      backgroundUri: currentNotebook.backgroundUri,
+      showLines: currentNotebook.showLines,
+      pages: currentNotebook.pages.map(page => ({
+        pageNumber: page.pageNumber,
+        content: page.content,
+        lastModified: page.lastModified,
+        attachments: page.attachments?.map(att => ({
+          id: att.id,
+          type: att.type,
+          name: att.name,
+          mimeType: att.mimeType,
+          createdAt: att.createdAt,
+          // locationデータはそのまま、ファイルはパス参照
+          data: att.type === 'location' ? att.data : undefined,
+          filePath: attachmentFiles[att.id] || undefined,
+        }))
+      }))
+    }
+    zip.file('notebook.json', JSON.stringify(manifest, null, 2))
+
     const content = await zip.generateAsync({ type: 'blob' })
     saveAs(content, `${currentNotebook.title}.zip`)
     setIsMenuOpen(false)
+  }
+
+  // Action: Import ZIP
+  const handleImportZip = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return
+    const file = e.target.files[0]
+
+    try {
+      const zip = await JSZip.loadAsync(file)
+      const manifestFile = zip.file('notebook.json')
+
+      if (!manifestFile) {
+        alert('このZIPにはnotebook.jsonが含まれていません。\nToshiyuki Noteからエクスポートしたファイルを使用してください。')
+        return
+      }
+
+      const manifestStr = await manifestFile.async('string')
+      const manifest = JSON.parse(manifestStr)
+
+      // 新しいNotebookを構築
+      const now = new Date().toISOString()
+      const newPages: Page[] = []
+
+      for (const pageDef of manifest.pages) {
+        const attachments: Attachment[] = []
+
+        if (pageDef.attachments) {
+          for (const attDef of pageDef.attachments) {
+            if (attDef.type === 'location') {
+              // locationは元データをそのまま復元
+              attachments.push({
+                id: uuidv4(),
+                type: 'location',
+                data: attDef.data,
+                name: attDef.name,
+                createdAt: attDef.createdAt || now,
+              })
+            } else if (attDef.filePath) {
+              // ファイル/画像はZIPから読み込み
+              const zipEntry = zip.file(attDef.filePath)
+              if (zipEntry) {
+                const blob = await zipEntry.async('blob')
+                attachments.push({
+                  id: uuidv4(),
+                  type: attDef.type,
+                  data: blob,
+                  name: attDef.name,
+                  mimeType: attDef.mimeType,
+                  createdAt: attDef.createdAt || now,
+                })
+              }
+            }
+          }
+        }
+
+        newPages.push({
+          pageNumber: pageDef.pageNumber,
+          content: pageDef.content || '',
+          lastModified: pageDef.lastModified || now,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        })
+      }
+
+      // 足りないページを補完（50ページに満たない場合）
+      while (newPages.length < TOTAL_PAGES) {
+        newPages.push({
+          pageNumber: newPages.length + 1,
+          content: '',
+          lastModified: now,
+        })
+      }
+
+      const importedNotebook: Notebook = {
+        id: uuidv4(),
+        title: manifest.title || file.name.replace(/\.zip$/i, ''),
+        createdAt: manifest.createdAt || now,
+        currentPage: 1,
+        pages: newPages,
+        backgroundUri: manifest.backgroundUri,
+        showLines: manifest.showLines,
+      }
+
+      await importNotebook(importedNotebook)
+      setIsMenuOpen(false)
+      alert(`「${importedNotebook.title}」をインポートしました。`)
+    } catch (err) {
+      console.error('Import failed:', err)
+      alert('ZIPの読み込みに失敗しました。ファイルが破損している可能性があります。')
+    }
   }
 
   // Action: Create New
@@ -386,6 +509,7 @@ function App() {
         onDeleteNotebook={deleteNotebook}
         onCreateNotebook={handleCreateNotebook}
         onDownloadZip={handleDownloadZip}
+        onImportZip={handleImportZip}
         onUpdateNotebook={updateNotebook}
         sync={{
           isConnected,

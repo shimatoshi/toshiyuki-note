@@ -20,15 +20,11 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ImageView;
-import android.net.Uri;
-import android.app.Activity;
-import android.content.Intent;
 
 import androidx.core.app.NotificationCompat;
 
@@ -68,7 +64,7 @@ public class OverlayService extends Service {
         return null;
     }
 
-    private static File logFile;
+    private File logFile;
 
     private void fileLog(String msg) {
         try {
@@ -148,7 +144,11 @@ public class OverlayService extends Service {
                 }
             }
         };
-        registerReceiver(debugReceiver, new IntentFilter("com.toshiyuki.note.DEBUG"));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            registerReceiver(debugReceiver, new IntentFilter("com.toshiyuki.note.DEBUG"), RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(debugReceiver, new IntentFilter("com.toshiyuki.note.DEBUG"));
+        }
     }
 
     @Override
@@ -205,7 +205,6 @@ public class OverlayService extends Service {
         bubbleAdded = true;
 
         bubbleView.setOnTouchListener((v, event) -> {
-            fileLog("TOUCH action=" + event.getAction() + " rawX=" + event.getRawX() + " rawY=" + event.getRawY());
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     initialX = bubbleParams.x;
@@ -233,7 +232,6 @@ public class OverlayService extends Service {
                     return true;
 
                 case MotionEvent.ACTION_UP:
-                    fileLog("ACTION_UP isDragging=" + isDragging);
                     if (!isDragging) {
                         togglePanel();
                     }

@@ -57,6 +57,8 @@ public class NotesBridge {
     private static final String TAG = "NotesBridge";
     private static final String ROOT_DIR = "ToshiyukiNote";
     private static final int DEFAULT_PAGES = 100;
+    private static final SimpleDateFormat ISO_FORMAT =
+            new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
 
     private final Context context;
     private final WebView webView;
@@ -130,17 +132,13 @@ public class NotesBridge {
     public String createNotebook(String title) {
         try {
             String id = UUID.randomUUID().toString();
-            String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(new Date());
+            String now = nowISO();
 
             File nbDir = new File(rootDir, id);
             nbDir.mkdirs();
             new File(nbDir, "pages").mkdirs();
             new File(nbDir, "attachments").mkdirs();
-
-            // Create empty pages
-            for (int i = 1; i <= DEFAULT_PAGES; i++) {
-                writeFile(new File(nbDir, "pages/" + String.format(Locale.US, "%03d", i) + ".txt"), "");
-            }
+            // Pages are created lazily on first write
 
             // meta.json
             JSONObject meta = new JSONObject();
@@ -187,7 +185,7 @@ public class NotesBridge {
             JSONObject newMeta = new JSONObject(jsonMeta);
             // Ensure id is preserved
             newMeta.put("id", id);
-            String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(new Date());
+            String now = nowISO();
             newMeta.put("lastModified", now);
             writeFile(metaFile, newMeta.toString(2));
 
@@ -226,7 +224,7 @@ public class NotesBridge {
             String metaStr = readFile(metaFile);
             if (metaStr != null) {
                 JSONObject meta = new JSONObject(metaStr);
-                String now = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(new Date());
+                String now = nowISO();
                 meta.put("lastModified", now);
                 writeFile(metaFile, meta.toString(2));
                 updateIndex(notebookId, meta.optString("title", ""), now);
@@ -262,12 +260,12 @@ public class NotesBridge {
                 for (File pf : pageFiles) {
                     String content = readFile(pf);
                     if (content == null || content.isEmpty()) continue;
-                    if (content.toLowerCase(Locale.getDefault()).contains(lowerQuery)) {
-                        // Extract snippet
-                        int idx = content.toLowerCase(Locale.getDefault()).indexOf(lowerQuery);
+                    String lowerContent = content.toLowerCase(Locale.getDefault());
+                    int idx = lowerContent.indexOf(lowerQuery);
+                    if (idx >= 0) {
                         int start = Math.max(0, idx - 20);
                         int end = Math.min(content.length(), idx + query.length() + 20);
-                        String snippet = content.substring(start, end);
+                        String snippet = (start > 0 ? "..." : "") + content.substring(start, end) + (end < content.length() ? "..." : "");
 
                         // Parse page number from filename (001.txt → 1)
                         String fname = pf.getName().replace(".txt", "");
@@ -313,44 +311,30 @@ public class NotesBridge {
 
     @JavascriptInterface
     public String saveImageAttachment(String notebookId, int pageNum, String base64data, String filename) {
-        try {
-            String attId = UUID.randomUUID().toString();
-            String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf(".")) : ".jpg";
-
-            // Save binary file
-            byte[] data = Base64.decode(base64data, Base64.DEFAULT);
-            File attFile = new File(new File(rootDir, notebookId), "attachments/" + attId + ext);
-            FileOutputStream fos = new FileOutputStream(attFile);
-            fos.write(data);
-            fos.close();
-
-            // Update manifest
-            addToManifest(notebookId, pageNum, attId, "image", filename, ext);
-
-            return attId;
-        } catch (Exception e) {
-            Log.e(TAG, "saveImageAttachment error", e);
-            return "";
-        }
+        return saveBinaryAttachment(notebookId, pageNum, base64data, filename, "image", ".jpg");
     }
 
     @JavascriptInterface
     public String saveFileAttachment(String notebookId, int pageNum, String base64data, String filename, String mimeType) {
+        return saveBinaryAttachment(notebookId, pageNum, base64data, filename, "file", ".dat");
+    }
+
+    private String saveBinaryAttachment(String notebookId, int pageNum, String base64data, String filename, String type, String defaultExt) {
         try {
             String attId = UUID.randomUUID().toString();
-            String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf(".")) : ".dat";
+            String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf(".")) : defaultExt;
 
             byte[] data = Base64.decode(base64data, Base64.DEFAULT);
             File attFile = new File(new File(rootDir, notebookId), "attachments/" + attId + ext);
-            FileOutputStream fos = new FileOutputStream(attFile);
-            fos.write(data);
-            fos.close();
+            attFile.getParentFile().mkdirs();
+            try (FileOutputStream fos = new FileOutputStream(attFile)) {
+                fos.write(data);
+            }
 
-            addToManifest(notebookId, pageNum, attId, "file", filename, ext);
-
+            addToManifest(notebookId, pageNum, attId, type, filename, ext);
             return attId;
         } catch (Exception e) {
-            Log.e(TAG, "saveFileAttachment error", e);
+            Log.e(TAG, "saveBinaryAttachment error", e);
             return "";
         }
     }
@@ -516,9 +500,21 @@ public class NotesBridge {
                 ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
 
         try {
+            final boolean[] responded = {false};
+            final Runnable timeoutRunnable = () -> {
+                if (!responded[0]) {
+                    responded[0] = true;
+                    String js = callbackName + "({\"error\": \"Location timeout\"})";
+                    webView.evaluateJavascript(js, null);
+                }
+            };
+
             lm.requestSingleUpdate(provider, new LocationListener() {
                 @Override
                 public void onLocationChanged(Location loc) {
+                    if (responded[0]) return;
+                    responded[0] = true;
+                    mainHandler.removeCallbacks(timeoutRunnable);
                     mainHandler.post(() -> {
                         String js = callbackName + "({\"latitude\":" + loc.getLatitude()
                                 + ",\"longitude\":" + loc.getLongitude()
@@ -529,6 +525,9 @@ public class NotesBridge {
                 @Override public void onStatusChanged(String p, int s, Bundle e) {}
                 @Override public void onProviderEnabled(String p) {}
                 @Override public void onProviderDisabled(String p) {
+                    if (responded[0]) return;
+                    responded[0] = true;
+                    mainHandler.removeCallbacks(timeoutRunnable);
                     mainHandler.post(() -> {
                         String js = callbackName + "({\"error\": \"Provider disabled: " + p + "\"})";
                         webView.evaluateJavascript(js, null);
@@ -536,13 +535,7 @@ public class NotesBridge {
                 }
             }, Looper.getMainLooper());
 
-            // Timeout after 15 seconds
-            mainHandler.postDelayed(() -> {
-                mainHandler.post(() -> {
-                    String js = callbackName + "({\"error\": \"Location timeout\"})";
-                    webView.evaluateJavascript(js, null);
-                });
-            }, 15000);
+            mainHandler.postDelayed(timeoutRunnable, 15000);
 
         } catch (SecurityException e) {
             mainHandler.post(() -> {
@@ -626,7 +619,7 @@ public class NotesBridge {
         att.put("type", type);
         att.put("name", name);
         att.put("ext", ext);
-        att.put("createdAt", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(new Date()));
+        att.put("createdAt", nowISO());
         pageAtts.put(att);
 
         manifest.put(key, pageAtts);
@@ -669,15 +662,13 @@ public class NotesBridge {
 
     private String readFile(File file) {
         if (!file.exists()) return null;
-        try {
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             StringBuilder sb = new StringBuilder();
-            BufferedReader br = new BufferedReader(new FileReader(file));
             String line;
             while ((line = br.readLine()) != null) {
                 if (sb.length() > 0) sb.append('\n');
                 sb.append(line);
             }
-            br.close();
             return sb.toString();
         } catch (IOException e) {
             Log.e(TAG, "readFile error: " + file.getAbsolutePath(), e);
@@ -697,11 +688,16 @@ public class NotesBridge {
     }
 
     private byte[] readBinaryFile(File file) throws IOException {
-        FileInputStream fis = new FileInputStream(file);
-        byte[] data = new byte[(int) file.length()];
-        fis.read(data);
-        fis.close();
-        return data;
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] data = new byte[(int) file.length()];
+            int offset = 0;
+            while (offset < data.length) {
+                int read = fis.read(data, offset, data.length - offset);
+                if (read < 0) break;
+                offset += read;
+            }
+            return data;
+        }
     }
 
     private void deleteRecursive(File file) {
@@ -712,6 +708,10 @@ public class NotesBridge {
             }
         }
         file.delete();
+    }
+
+    private synchronized String nowISO() {
+        return ISO_FORMAT.format(new Date());
     }
 
     private String guessMimeType(String ext) {

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#E0121212">
+
+    <ImageView
+        android:id="@+id/overlay_close_btn"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="4dp"
+        android:padding="6dp"
+        android:src="@drawable/ic_close"
+        android:contentDescription="閉じる"
+        android:background="?attr/selectableItemBackgroundBorderless" />
+
+    <WebView
+        android:id="@+id/overlay_webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="32dp" />
+</FrameLayout>

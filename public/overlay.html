@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Quick Memo</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  font-family: -apple-system, sans-serif;
+  overflow: hidden;
+}
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 4px 8px 8px;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 4px;
+  flex-shrink: 0;
+}
+.header select {
+  flex: 1;
+  background: #2a2a2a;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+.header .page-info {
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+}
+.header button {
+  background: #1E88E5;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.header button:active { background: #1565C0; }
+.header button.new-btn {
+  background: #43A047;
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: bold;
+}
+textarea {
+  flex: 1;
+  background: #222;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+textarea:focus { border-color: #1E88E5; }
+.status {
+  font-size: 10px;
+  color: #666;
+  text-align: right;
+  padding: 2px 0 0;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <select id="notebookSelect"></select>
+    <span class="page-info" id="pageInfo">p.1</span>
+    <button onclick="prevPage()">&#9664;</button>
+    <button onclick="nextPage()">&#9654;</button>
+    <button class="new-btn" onclick="newQuickNote()">+</button>
+  </div>
+  <textarea id="editor" placeholder="メモを入力..."></textarea>
+  <div class="status" id="status">ready</div>
+</div>
+
+<script>
+const DB_NAME = 'toshiyuki-db';
+const DB_VERSION = 2;
+let db = null;
+let currentNotebook = null;
+let currentPage = 0;
+let saveTimer = null;
+
+async function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('metadata')) db.createObjectStore('metadata', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('notebooks')) db.createObjectStore('notebooks', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('calendar_index')) db.createObjectStore('calendar_index');
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function loadNotebookList() {
+  const tx = db.transaction('metadata', 'readonly');
+  const store = tx.objectStore('metadata');
+  const all = await new Promise((res, rej) => {
+    const r = store.getAll();
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+
+  all.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+
+  const sel = document.getElementById('notebookSelect');
+  sel.innerHTML = '';
+  for (const m of all) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.title;
+    sel.appendChild(opt);
+  }
+
+  if (all.length > 0) {
+    sel.value = all[0].id;
+    await loadNotebook(all[0].id);
+  }
+}
+
+async function loadNotebook(id) {
+  const tx = db.transaction('notebooks', 'readonly');
+  const store = tx.objectStore('notebooks');
+  const nb = await new Promise((res, rej) => {
+    const r = store.get(id);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+
+  if (nb) {
+    currentNotebook = nb;
+    currentPage = 0;
+    showPage();
+  }
+}
+
+function showPage() {
+  if (!currentNotebook) return;
+  const page = currentNotebook.pages[currentPage];
+  document.getElementById('editor').value = page ? page.content : '';
+  document.getElementById('pageInfo').textContent =
+    'p.' + (currentPage + 1) + '/' + currentNotebook.pages.length;
+}
+
+function prevPage() {
+  if (currentPage > 0) {
+    saveCurrentPage();
+    currentPage--;
+    showPage();
+  }
+}
+
+function nextPage() {
+  if (currentNotebook && currentPage < currentNotebook.pages.length - 1) {
+    saveCurrentPage();
+    currentPage++;
+    showPage();
+  }
+}
+
+function saveCurrentPage() {
+  if (!currentNotebook) return;
+  const editor = document.getElementById('editor');
+  const page = currentNotebook.pages[currentPage];
+  if (page) {
+    page.content = editor.value;
+    page.lastModified = new Date().toISOString();
+  }
+}
+
+async function persistNotebook() {
+  if (!currentNotebook) return;
+  saveCurrentPage();
+
+  const tx = db.transaction(['notebooks', 'metadata'], 'readwrite');
+  tx.objectStore('notebooks').put(currentNotebook);
+  tx.objectStore('metadata').put({
+    id: currentNotebook.id,
+    title: currentNotebook.title,
+    createdAt: currentNotebook.createdAt,
+    lastModified: new Date().toISOString()
+  });
+
+  await new Promise((res, rej) => {
+    tx.oncomplete = res;
+    tx.onerror = () => rej(tx.error);
+  });
+
+  document.getElementById('status').textContent = 'saved ' + new Date().toLocaleTimeString();
+}
+
+function newQuickNote() {
+  const id = 'nb_' + Date.now();
+  const now = new Date().toISOString();
+  const pages = [];
+  for (let i = 0; i < 100; i++) {
+    pages.push({ pageNumber: i + 1, content: '', attachments: [] });
+  }
+  currentNotebook = {
+    id,
+    title: 'Quick ' + new Date().toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    createdAt: now,
+    pages
+  };
+  currentPage = 0;
+
+  const sel = document.getElementById('notebookSelect');
+  const opt = document.createElement('option');
+  opt.value = id;
+  opt.textContent = currentNotebook.title;
+  sel.prepend(opt);
+  sel.value = id;
+
+  showPage();
+  persistNotebook();
+  document.getElementById('editor').focus();
+}
+
+// Auto-save on typing
+document.getElementById('editor').addEventListener('input', () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistNotebook, 800);
+});
+
+document.getElementById('notebookSelect').addEventListener('change', async (e) => {
+  await persistNotebook();
+  await loadNotebook(e.target.value);
+});
+
+// Init
+(async () => {
+  try {
+    db = await openDB();
+    await loadNotebookList();
+    document.getElementById('status').textContent = 'ready';
+  } catch (e) {
+    document.getElementById('status').textContent = 'error: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

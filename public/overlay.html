@@ -199,7 +199,7 @@ textarea.ruled {
 <!-- Search overlay -->
 <div class="search-overlay" id="searchOverlay">
   <div class="search-bar">
-    <input id="searchInput" placeholder="検索..." oninput="doSearch()">
+    <input id="searchInput" placeholder="検索..." oninput="scheduleSearch()">
     <button class="btn" onclick="closeSearch()">✕</button>
   </div>
   <div class="search-results" id="searchResults"></div>
@@ -235,7 +235,8 @@ let currentPage = 1;
 let totalPages = 100;
 let showLines = false;
 let saveTimer = null;
-let attachments = []; // current page attachments
+let searchTimer = null;
+let attachments = [];
 
 const $ = id => document.getElementById(id);
 
@@ -362,6 +363,7 @@ function prevPage() {
     saveCurrent();
     currentPage--;
     loadPage();
+    saveCurrentPage();
   }
 }
 
@@ -370,6 +372,7 @@ function nextPage() {
     saveCurrent();
     currentPage++;
     loadPage();
+    saveCurrentPage();
   }
 }
 
@@ -379,10 +382,10 @@ function nextPage() {
 function saveCurrent() {
   if (!currentNbId) return;
   const content = $('editor').value;
-  log('savePage nb=' + currentNbId + ' p=' + currentPage + ' len=' + content.length);
   NotesBridge.savePage(currentNbId, currentPage, content);
+}
 
-  // Save currentPage to meta
+function saveCurrentPage() {
   if (currentMeta) {
     currentMeta.currentPage = currentPage;
     NotesBridge.updateNotebookMeta(currentNbId, JSON.stringify(currentMeta));
@@ -619,6 +622,11 @@ function closeSearch() {
   $('searchResults').innerHTML = '';
 }
 
+function scheduleSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(doSearch, 300);
+}
+
 function doSearch() {
   const query = $('searchInput').value.trim();
   if (!query) { $('searchResults').innerHTML = ''; return; }
@@ -642,8 +650,8 @@ function doSearch() {
       + '<div class="snippet">' + escHtml(r.snippet) + '</div>';
     div.onclick = async () => {
       closeSearch();
-      // Switch to that notebook and page
-      $('nbSelect').value = r.notebookId;
+      const nb = notebooks.find(n => n.id === r.notebookId);
+      if (nb) $('nbPickerBtn').textContent = nb.title;
       await loadNotebook(r.notebookId);
       currentPage = r.pageNumber;
       await loadPage();
@@ -675,17 +683,7 @@ $('editor').addEventListener('touchend', e => {
 // ==========================================
 // Utilities
 // ==========================================
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      resolve(result.split(',')[1]); // Remove data URL prefix
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+
 
 function escHtml(s) {
   const d = document.createElement('div');

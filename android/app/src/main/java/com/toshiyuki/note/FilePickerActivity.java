@@ -73,6 +73,7 @@ public class FilePickerActivity extends Activity {
             } else {
                 if (callback != null) callback.onPickCancelled();
             }
+            callback = null; // Prevent leak
         }
         finish();
     }

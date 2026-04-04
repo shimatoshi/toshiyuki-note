@@ -49,14 +49,6 @@ async function writeText(path: string, data: string): Promise<void> {
   await Filesystem.writeFile({ path, directory: DIR, data, encoding: Encoding.UTF8, recursive: true })
 }
 
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await Filesystem.stat({ path, directory: DIR })
-    return true
-  } catch {
-    return false
-  }
-}
 
 // ==========================================
 // Init
@@ -64,7 +56,9 @@ async function fileExists(path: string): Promise<boolean> {
 
 export async function initStorage(): Promise<void> {
   await ensureDir(ROOT)
-  if (!(await fileExists(indexPath()))) {
+  // Write-if-absent: read first to avoid TOCTOU race with overlay service
+  const existing = await readText(indexPath())
+  if (existing === null) {
     await writeText(indexPath(), '[]')
   }
 }
@@ -126,17 +120,16 @@ export const fileDb = {
       if (!metaStr) return undefined
       const meta = JSON.parse(metaStr)
 
-      // Read all pages
-      const pages: Page[] = []
+      // Read all pages in parallel
       const totalPages = meta.totalPages || TOTAL_PAGES
-      for (let i = 1; i <= totalPages; i++) {
-        const content = await readText(pagePath(id, i)) || ''
-        pages.push({
-          pageNumber: i,
-          content,
-          lastModified: meta.lastModified || meta.createdAt,
-        })
-      }
+      const pageContents = await Promise.all(
+        Array.from({ length: totalPages }, (_, i) => readText(pagePath(id, i + 1)))
+      )
+      const pages: Page[] = pageContents.map((content, i) => ({
+        pageNumber: i + 1,
+        content: content || '',
+        lastModified: meta.lastModified || meta.createdAt,
+      }))
 
       // Read attachments
       const manifestStr = await readText(manifestPath(id))
@@ -208,10 +201,12 @@ export const fileDb = {
       await ensureDir(`${ROOT}/${id}/pages`)
       await ensureDir(`${ROOT}/${id}/attachments`)
 
-      // Save each page
-      for (const page of notebook.pages) {
-        await writeText(pagePath(id, page.pageNumber), page.content)
-      }
+      // Save pages in parallel (only non-empty to avoid unnecessary writes)
+      await Promise.all(
+        notebook.pages
+          .filter(p => p.content.length > 0)
+          .map(p => writeText(pagePath(id, p.pageNumber), p.content))
+      )
 
       // Save attachments
       const manifest: Record<string, any[]> = {}

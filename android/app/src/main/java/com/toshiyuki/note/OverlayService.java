@@ -4,17 +4,12 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.graphics.PixelFormat;
 import android.os.Build;
-import android.os.Environment;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -28,127 +23,65 @@ import android.widget.ImageView;
 
 import androidx.core.app.NotificationCompat;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.PrintWriter;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-
 public class OverlayService extends Service {
 
-    private static final String TAG = "OverlayService";
     private static final String CHANNEL_ID = "overlay_channel";
     private static final int NOTIFICATION_ID = 1;
 
+    private final DebugLogger logger = new DebugLogger();
     private WindowManager windowManager;
-    private View bubbleView;
-    private View panelView;
-    private WebView webView;
-    private boolean isPanelVisible = false;
-    private boolean bubbleAdded = false;
 
+    // Bubble state
+    private View bubbleView;
     private WindowManager.LayoutParams bubbleParams;
+    private boolean bubbleAdded = false;
     private int initialX, initialY;
     private float initialTouchX, initialTouchY;
     private boolean isDragging = false;
 
-    // Panel drag
+    // Panel state
+    private View panelView;
+    private WebView webView;
     private WindowManager.LayoutParams panelParams;
+    private boolean isPanelVisible = false;
     private int panelDragStartX, panelDragStartY;
 
-    private BroadcastReceiver debugReceiver;
-
     @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
-
-    private File logFile;
-
-    private void fileLog(String msg) {
-        try {
-            if (logFile == null) {
-                // Use external files dir - accessible from Termux via ~/storage/shared/Android/data/com.toshiyuki.note/files/
-                File dir = getExternalFilesDir(null);
-                if (dir == null) dir = getFilesDir();
-                logFile = new File(dir, "overlay_debug.log");
-            }
-            PrintWriter pw = new PrintWriter(new FileWriter(logFile, true));
-            String ts = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(new Date());
-            pw.println(ts + " " + msg);
-            pw.flush();
-            pw.close();
-            Log.d(TAG, msg);
-        } catch (Exception e) {
-            Log.e(TAG, "fileLog error: " + e.getMessage());
-        }
-    }
+    public IBinder onBind(Intent intent) { return null; }
 
     @Override
     public void onCreate() {
         super.onCreate();
-        fileLog("onCreate");
+        logger.init(this);
+        logger.log("onCreate");
 
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
 
-        // Check overlay permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            fileLog("No overlay permission, stopping service");
+            logger.log("No overlay permission, stopping service");
             stopSelf();
             return;
         }
 
-        fileLog("Overlay permission OK");
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
         try {
             createBubble();
-            fileLog("createBubble success, bubbleView=" + bubbleView + " bubbleAdded=" + bubbleAdded);
         } catch (Exception e) {
-            fileLog("Failed to create bubble: " + e.getMessage());
+            logger.log("Failed to create bubble: " + e.getMessage());
             stopSelf();
+            return;
         }
 
-        // Debug receiver: am broadcast -a com.toshiyuki.note.DEBUG_TOGGLE
-        debugReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getStringExtra("cmd");
-                fileLog("Debug broadcast received: cmd=" + action);
-                if ("toggle".equals(action)) {
-                    togglePanel();
-                } else if ("status".equals(action)) {
-                    fileLog("STATUS: bubbleAdded=" + bubbleAdded
-                            + " bubbleView=" + bubbleView
-                            + " bubbleParent=" + (bubbleView != null ? bubbleView.getParent() : "null")
-                            + " isPanelVisible=" + isPanelVisible
-                            + " panelView=" + panelView);
-                } else if ("dump".equals(action)) {
-                    // Dump log to shared storage for Termux to read
-                    try {
-                        File src = new File(getFilesDir(), "overlay_debug.log");
-                        File dst = new File(Environment.getExternalStoragePublicDirectory(
-                                Environment.DIRECTORY_DOWNLOADS), "overlay_debug.log");
-                        java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(src));
-                        PrintWriter pw = new PrintWriter(new FileWriter(dst));
-                        String line;
-                        while ((line = br.readLine()) != null) pw.println(line);
-                        pw.close();
-                        br.close();
-                        fileLog("Log dumped to Downloads");
-                    } catch (Exception e) {
-                        fileLog("dump error: " + e.getMessage());
-                    }
-                }
+        logger.registerReceiver(this, cmd -> {
+            if ("toggle".equals(cmd)) togglePanel();
+            else if ("status".equals(cmd)) {
+                logger.log("STATUS: bubbleAdded=" + bubbleAdded
+                        + " isPanelVisible=" + isPanelVisible
+                        + " panelView=" + panelView);
             }
-        };
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            registerReceiver(debugReceiver, new IntentFilter("com.toshiyuki.note.DEBUG"), RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(debugReceiver, new IntentFilter("com.toshiyuki.note.DEBUG"));
-        }
+        });
     }
 
     @Override
@@ -156,24 +89,33 @@ public class OverlayService extends Service {
         return START_STICKY;
     }
 
+    @Override
+    public void onDestroy() {
+        logger.log("onDestroy");
+        logger.unregisterReceiver(this);
+        safeRemoveView(isPanelVisible ? panelView : null);
+        safeRemoveView(bubbleAdded ? bubbleView : null);
+        if (webView != null) webView.destroy();
+        super.onDestroy();
+    }
+
+    // ==========================================
+    // Notification
+    // ==========================================
+
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "としゆきノート オーバーレイ",
-                    NotificationManager.IMPORTANCE_LOW
-            );
+                    CHANNEL_ID, "toshiyuki-note オーバーレイ", NotificationManager.IMPORTANCE_LOW);
             channel.setDescription("フローティングメモ機能");
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) {
-                manager.createNotificationChannel(channel);
-            }
+            NotificationManager mgr = getSystemService(NotificationManager.class);
+            if (mgr != null) mgr.createNotificationChannel(channel);
         }
     }
 
     private Notification buildNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("としゆきノート")
+                .setContentTitle("toshiyuki-note")
                 .setContentText("フローティングメモ起動中")
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -181,22 +123,16 @@ public class OverlayService extends Service {
                 .build();
     }
 
-    private int getOverlayType() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE;
-    }
+    // ==========================================
+    // Bubble
+    // ==========================================
 
     private void createBubble() {
         bubbleView = LayoutInflater.from(this).inflate(R.layout.overlay_bubble, null);
 
         bubbleParams = new WindowManager.LayoutParams(
-                dpToPx(48),
-                dpToPx(48),
-                getOverlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
-        );
+                dpToPx(48), dpToPx(48), getOverlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         bubbleParams.gravity = Gravity.TOP | Gravity.START;
         bubbleParams.x = dpToPx(8);
         bubbleParams.y = dpToPx(100);
@@ -213,37 +149,31 @@ public class OverlayService extends Service {
                     initialTouchY = event.getRawY();
                     isDragging = false;
                     return true;
-
                 case MotionEvent.ACTION_MOVE:
                     int dx = (int) (event.getRawX() - initialTouchX);
                     int dy = (int) (event.getRawY() - initialTouchY);
-                    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                        isDragging = true;
-                    }
-                    if (bubbleAdded && bubbleView != null && bubbleView.getParent() != null) {
+                    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) isDragging = true;
+                    if (bubbleAdded && bubbleView.getParent() != null) {
                         bubbleParams.x = initialX + dx;
                         bubbleParams.y = initialY + dy;
-                        try {
-                            windowManager.updateViewLayout(bubbleView, bubbleParams);
-                        } catch (Exception e) {
-                            fileLog("updateViewLayout error: " + e.getMessage());
-                        }
+                        try { windowManager.updateViewLayout(bubbleView, bubbleParams); }
+                        catch (Exception e) { /* view detached */ }
                     }
                     return true;
-
                 case MotionEvent.ACTION_UP:
-                    if (!isDragging) {
-                        togglePanel();
-                    }
+                    if (!isDragging) togglePanel();
                     return true;
             }
             return false;
         });
     }
 
+    // ==========================================
+    // Panel
+    // ==========================================
+
     private void ensurePanel() {
         if (panelView != null) return;
-
         try {
             panelView = LayoutInflater.from(this).inflate(R.layout.overlay_panel, null);
             webView = panelView.findViewById(R.id.overlay_webview);
@@ -253,134 +183,93 @@ public class OverlayService extends Service {
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
             settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+            settings.setAllowFileAccess(true);
+            settings.setAllowContentAccess(true);
 
             webView.setWebViewClient(new WebViewClient());
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public boolean onConsoleMessage(android.webkit.ConsoleMessage cm) {
-                    String level = cm.messageLevel().name();
-                    fileLog("JS[" + level + "] " + cm.message()
+                    logger.log("JS[" + cm.messageLevel().name() + "] " + cm.message()
                             + " (" + cm.sourceId() + ":" + cm.lineNumber() + ")");
                     return true;
                 }
-
                 @Override
                 public void onGeolocationPermissionsShowPrompt(String origin,
                         android.webkit.GeolocationPermissions.Callback callback) {
-                    fileLog("Geolocation permission requested from: " + origin);
                     callback.invoke(origin, true, false);
                 }
             });
 
-            // Register JavaScript bridge for file-based storage
             webView.addJavascriptInterface(new NotesBridge(this, webView), "NotesBridge");
-
-            settings.setAllowFileAccess(true);
-            settings.setAllowContentAccess(true);
-
             webView.loadUrl("file:///android_asset/public/overlay.html");
 
             ImageView closeBtn = panelView.findViewById(R.id.overlay_close_btn);
             closeBtn.setOnClickListener(v -> togglePanel());
         } catch (Exception e) {
-            fileLog("ensurePanel FAILED: " + e.getClass().getName() + ": " + e.getMessage());
-            // Log full stack trace
+            logger.log("ensurePanel FAILED: " + e.getClass().getName() + ": " + e.getMessage());
             java.io.StringWriter sw = new java.io.StringWriter();
             e.printStackTrace(new java.io.PrintWriter(sw));
-            fileLog("ensurePanel stacktrace: " + sw.toString());
+            logger.log("ensurePanel stacktrace: " + sw);
             panelView = null;
             webView = null;
         }
     }
 
     private void togglePanel() {
-        fileLog("togglePanel called, isPanelVisible=" + isPanelVisible);
         try {
             if (isPanelVisible) {
                 windowManager.removeView(panelView);
                 isPanelVisible = false;
-                fileLog("Panel hidden");
             } else {
                 ensurePanel();
-                if (panelView == null) {
-                    fileLog("panelView is null after ensurePanel - ABORT");
-                    return;
-                }
-
-                // Remove from parent if already attached
-                if (panelView.getParent() != null) {
-                    fileLog("panelView already has parent, removing first");
-                    windowManager.removeView(panelView);
-                }
+                if (panelView == null) return;
+                if (panelView.getParent() != null) windowManager.removeView(panelView);
 
                 DisplayMetrics metrics = getResources().getDisplayMetrics();
-                // Default: compact size (~4 lines of text + header/footer ≈ 280dp)
                 int panelHeight = Math.min(dpToPx(280), metrics.heightPixels / 2);
-                fileLog("Panel height: " + panelHeight + ", screen: " + metrics.heightPixels);
-
-                // Width: 60% of screen (compact but usable)
                 int panelWidth = (int) (metrics.widthPixels * 0.6);
 
                 panelParams = new WindowManager.LayoutParams(
-                        panelWidth,
-                        panelHeight,
-                        getOverlayType(),
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                        PixelFormat.TRANSLUCENT
-                );
+                        panelWidth, panelHeight, getOverlayType(),
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT);
                 panelParams.gravity = Gravity.TOP | Gravity.START;
-                panelParams.x = metrics.widthPixels - panelWidth; // Right side
-                panelParams.y = metrics.heightPixels - panelHeight; // Bottom position
+                panelParams.x = metrics.widthPixels - panelWidth;
+                panelParams.y = metrics.heightPixels - panelHeight;
 
                 windowManager.addView(panelView, panelParams);
                 isPanelVisible = true;
-
-                // Setup drag handle for resize
                 setupPanelDragHandle();
-
-                fileLog("Panel shown successfully");
             }
         } catch (Exception e) {
-            fileLog("togglePanel EXCEPTION: " + e.getMessage());
+            logger.log("togglePanel error: " + e.getMessage());
             isPanelVisible = false;
         }
     }
 
     private void setupPanelDragHandle() {
-        View dragHandle = panelView.findViewById(R.id.overlay_drag_handle);
-        if (dragHandle == null) {
-            fileLog("drag handle NOT FOUND");
-            return;
-        }
-        fileLog("drag handle setup OK");
+        View handle = panelView.findViewById(R.id.overlay_drag_handle);
+        if (handle == null) return;
 
-        dragHandle.setOnTouchListener((v, event) -> {
+        handle.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     panelDragStartX = (int) event.getRawX();
                     panelDragStartY = (int) event.getRawY();
                     return true;
-
                 case MotionEvent.ACTION_MOVE:
-                    int dx = (int) event.getRawX() - panelDragStartX;
-                    int dy = (int) event.getRawY() - panelDragStartY;
-                    panelParams.x += dx;
-                    panelParams.y += dy;
+                    panelParams.x += (int) event.getRawX() - panelDragStartX;
+                    panelParams.y += (int) event.getRawY() - panelDragStartY;
                     panelDragStartX = (int) event.getRawX();
                     panelDragStartY = (int) event.getRawY();
 
-                    // Clamp to screen
-                    DisplayMetrics metrics = getResources().getDisplayMetrics();
-                    panelParams.x = Math.max(-panelParams.width / 2, Math.min(metrics.widthPixels - panelParams.width / 2, panelParams.x));
-                    panelParams.y = Math.max(0, Math.min(metrics.heightPixels - dpToPx(60), panelParams.y));
+                    DisplayMetrics m = getResources().getDisplayMetrics();
+                    panelParams.x = Math.max(-panelParams.width / 2, Math.min(m.widthPixels - panelParams.width / 2, panelParams.x));
+                    panelParams.y = Math.max(0, Math.min(m.heightPixels - dpToPx(60), panelParams.y));
 
-                    try {
-                        windowManager.updateViewLayout(panelView, panelParams);
-                    } catch (Exception e) {
-                        fileLog("panel move error: " + e.getMessage());
-                    }
+                    try { windowManager.updateViewLayout(panelView, panelParams); }
+                    catch (Exception e) { /* detached */ }
                     return true;
-
                 case MotionEvent.ACTION_UP:
                     return true;
             }
@@ -388,33 +277,23 @@ public class OverlayService extends Service {
         });
     }
 
-    @Override
-    public void onDestroy() {
-        fileLog("onDestroy");
-        try {
-            if (debugReceiver != null) unregisterReceiver(debugReceiver);
-        } catch (Exception e) { /* ignore */ }
-        try {
-            if (isPanelVisible && panelView != null) {
-                windowManager.removeView(panelView);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error removing panel", e);
-        }
-        try {
-            if (bubbleAdded && bubbleView != null) {
-                windowManager.removeView(bubbleView);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error removing bubble", e);
-        }
-        if (webView != null) {
-            webView.destroy();
-        }
-        super.onDestroy();
+    // ==========================================
+    // Helpers
+    // ==========================================
+
+    private int getOverlayType() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
     }
 
     private int dpToPx(int dp) {
         return (int) (dp * getResources().getDisplayMetrics().density);
+    }
+
+    private void safeRemoveView(View view) {
+        if (view != null) {
+            try { windowManager.removeView(view); } catch (Exception e) { /* ignore */ }
+        }
     }
 }

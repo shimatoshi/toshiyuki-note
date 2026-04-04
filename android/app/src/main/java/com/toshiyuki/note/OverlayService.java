@@ -250,6 +250,13 @@ public class OverlayService extends Service {
 
             webView.setWebViewClient(new WebViewClient());
             webView.setWebChromeClient(new WebChromeClient());
+
+            // Register JavaScript bridge for file-based storage
+            webView.addJavascriptInterface(new NotesBridge(this, webView), "NotesBridge");
+
+            settings.setAllowFileAccess(true);
+            settings.setAllowContentAccess(true);
+
             webView.loadUrl("file:///android_asset/public/overlay.html");
 
             ImageView closeBtn = panelView.findViewById(R.id.overlay_close_btn);
@@ -286,7 +293,7 @@ public class OverlayService extends Service {
                 }
 
                 DisplayMetrics metrics = getResources().getDisplayMetrics();
-                int panelHeight = metrics.heightPixels / 4;
+                int panelHeight = metrics.heightPixels / 2;
                 fileLog("Panel height: " + panelHeight + ", screen: " + metrics.heightPixels);
 
                 WindowManager.LayoutParams panelParams = new WindowManager.LayoutParams(

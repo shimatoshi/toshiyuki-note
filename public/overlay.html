@@ -131,6 +131,33 @@ textarea.ruled {
 }
 .nb-dropdown-item:active, .nb-dropdown-item.selected { background: #444; }
 
+/* Preview modal */
+.preview-modal {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.92); z-index: 200; display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: 12px;
+}
+.preview-modal.active { display: flex; }
+.preview-close {
+  position: absolute; top: 8px; right: 12px;
+  background: none; border: none; color: #fff; font-size: 24px; cursor: pointer;
+}
+.preview-delete {
+  position: absolute; top: 8px; left: 12px;
+  background: #cf6679; border: none; color: #fff; font-size: 12px;
+  padding: 4px 10px; border-radius: 4px; cursor: pointer;
+}
+.preview-content {
+  max-width: 100%; max-height: 80%; overflow: auto; text-align: center;
+}
+.preview-content img { max-width: 100%; max-height: 70vh; border-radius: 4px; }
+.preview-info {
+  margin-top: 8px; font-size: 12px; color: #aaa; text-align: center;
+}
+.preview-info a { color: #bb86fc; }
+.preview-info .loc-coords { font-size: 11px; color: #888; }
+
 /* Hidden file inputs */
 .hidden-input { display: none; }
 </style>
@@ -178,9 +205,13 @@ textarea.ruled {
   <div class="search-results" id="searchResults"></div>
 </div>
 
-<!-- Hidden inputs -->
-<input type="file" class="hidden-input" id="imageInput" accept="image/*" onchange="handleImage(event)">
-<input type="file" class="hidden-input" id="fileInput" onchange="handleFile(event)">
+<!-- Preview modal -->
+<div class="preview-modal" id="previewModal">
+  <button class="preview-close" onclick="closePreview()">✕</button>
+  <button class="preview-delete" id="previewDeleteBtn" onclick="deletePreviewAtt()">削除</button>
+  <div class="preview-content" id="previewContent"></div>
+  <div class="preview-info" id="previewInfo"></div>
+</div>
 
 <script>
 // Global error handler — catches ALL JS errors
@@ -445,24 +476,53 @@ function renderAttachments() {
   });
 }
 
+let previewingAtt = null;
+
 function previewAttachment(att) {
-  if (att.type === 'location') {
+  previewingAtt = att;
+  const content = $('previewContent');
+  const info = $('previewInfo');
+  content.innerHTML = '';
+  info.innerHTML = '';
+
+  if (att.type === 'image') {
+    const dataUrl = NotesBridge.getAttachmentDataUrl(currentNbId, att.id, att.ext);
+    if (dataUrl) {
+      content.innerHTML = '<img src="' + dataUrl + '">';
+      info.innerHTML = att.name || '画像';
+    }
+  } else if (att.type === 'location') {
     const data = NotesBridge.getAttachmentDataUrl(currentNbId, att.id, '.json');
     if (data) {
       const loc = JSON.parse(data);
-      const url = 'https://maps.google.com/maps?q=' + loc.latitude + ',' + loc.longitude;
-      if (confirm('位置: ' + (loc.address?.display_name || loc.latitude + ',' + loc.longitude) + '\n\nGoogle Mapsで開く？')) {
-        window.open(url);
-      }
+      const addr = loc.address?.display_name || '';
+      const mapsUrl = 'https://maps.google.com/maps?q=' + loc.latitude + ',' + loc.longitude;
+      content.innerHTML = '<div style="font-size:48px;margin:20px 0">📍</div>';
+      info.innerHTML = (addr ? '<div>' + escHtml(addr) + '</div>' : '')
+        + '<div class="loc-coords">' + loc.latitude.toFixed(6) + ', ' + loc.longitude.toFixed(6)
+        + ' (±' + Math.round(loc.accuracy) + 'm)</div>'
+        + '<div style="margin-top:8px"><a href="' + mapsUrl + '" target="_blank">Google Mapsで開く</a></div>';
     }
-  } else if (att.type === 'image') {
-    const dataUrl = NotesBridge.getAttachmentDataUrl(currentNbId, att.id, att.ext);
-    if (dataUrl) {
-      // Simple image preview
-      const w = window.open('');
-      w.document.write('<img src="' + dataUrl + '" style="max-width:100%">');
-    }
+  } else if (att.type === 'file') {
+    content.innerHTML = '<div style="font-size:48px;margin:20px 0">📎</div>';
+    info.innerHTML = '<div>' + escHtml(att.name || 'ファイル') + '</div>';
   }
+
+  $('previewModal').classList.add('active');
+}
+
+function closePreview() {
+  $('previewModal').classList.remove('active');
+  previewingAtt = null;
+}
+
+function deletePreviewAtt() {
+  if (!previewingAtt) return;
+  if (!confirm('この添付を削除しますか？')) return;
+  NotesBridge.deleteAttachment(currentNbId, previewingAtt.id);
+  closePreview();
+  loadAttachments();
+  $('status').textContent = '添付を削除しました';
 }
 
 function pickImage() {

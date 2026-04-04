@@ -57,10 +57,9 @@ public class OverlayService extends Service {
     private float initialTouchX, initialTouchY;
     private boolean isDragging = false;
 
-    // Panel resize
+    // Panel drag
     private WindowManager.LayoutParams panelParams;
-    private int panelDragStartY;
-    private int panelDragStartHeight;
+    private int panelDragStartX, panelDragStartY;
 
     private BroadcastReceiver debugReceiver;
 
@@ -321,14 +320,18 @@ public class OverlayService extends Service {
                 int panelHeight = Math.min(dpToPx(280), metrics.heightPixels / 2);
                 fileLog("Panel height: " + panelHeight + ", screen: " + metrics.heightPixels);
 
+                // Width: 60% of screen (compact but usable)
+                int panelWidth = (int) (metrics.widthPixels * 0.6);
+
                 panelParams = new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.MATCH_PARENT,
+                        panelWidth,
                         panelHeight,
                         getOverlayType(),
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                         PixelFormat.TRANSLUCENT
                 );
                 panelParams.gravity = Gravity.TOP | Gravity.START;
+                panelParams.x = metrics.widthPixels - panelWidth; // Right side
                 panelParams.y = metrics.heightPixels - panelHeight; // Bottom position
 
                 windowManager.addView(panelView, panelParams);
@@ -356,18 +359,22 @@ public class OverlayService extends Service {
         dragHandle.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
+                    panelDragStartX = (int) event.getRawX();
                     panelDragStartY = (int) event.getRawY();
-                    fileLog("panel drag DOWN y=" + panelDragStartY);
                     return true;
 
                 case MotionEvent.ACTION_MOVE:
+                    int dx = (int) event.getRawX() - panelDragStartX;
                     int dy = (int) event.getRawY() - panelDragStartY;
+                    panelParams.x += dx;
                     panelParams.y += dy;
+                    panelDragStartX = (int) event.getRawX();
                     panelDragStartY = (int) event.getRawY();
 
                     // Clamp to screen
                     DisplayMetrics metrics = getResources().getDisplayMetrics();
-                    panelParams.y = Math.max(0, Math.min(metrics.heightPixels - dpToPx(100), panelParams.y));
+                    panelParams.x = Math.max(-panelParams.width / 2, Math.min(metrics.widthPixels - panelParams.width / 2, panelParams.x));
+                    panelParams.y = Math.max(0, Math.min(metrics.heightPixels - dpToPx(60), panelParams.y));
 
                     try {
                         windowManager.updateViewLayout(panelView, panelParams);

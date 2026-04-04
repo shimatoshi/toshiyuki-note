@@ -142,12 +142,14 @@ public class OverlayService extends Service {
                     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
                         isDragging = true;
                     }
-                    bubbleParams.x = initialX + dx;
-                    bubbleParams.y = initialY + dy;
-                    try {
-                        windowManager.updateViewLayout(bubbleView, bubbleParams);
-                    } catch (Exception e) {
-                        Log.e(TAG, "updateViewLayout error", e);
+                    if (bubbleAdded && bubbleView != null && bubbleView.getParent() != null) {
+                        bubbleParams.x = initialX + dx;
+                        bubbleParams.y = initialY + dy;
+                        try {
+                            windowManager.updateViewLayout(bubbleView, bubbleParams);
+                        } catch (Exception e) {
+                            Log.e(TAG, "updateViewLayout error", e);
+                        }
                     }
                     return true;
 
@@ -188,16 +190,28 @@ public class OverlayService extends Service {
     }
 
     private void togglePanel() {
+        Log.d(TAG, "togglePanel called, isPanelVisible=" + isPanelVisible);
         try {
             if (isPanelVisible) {
                 windowManager.removeView(panelView);
                 isPanelVisible = false;
+                Log.d(TAG, "Panel hidden");
             } else {
                 ensurePanel();
-                if (panelView == null) return;
+                if (panelView == null) {
+                    Log.e(TAG, "panelView is null after ensurePanel");
+                    return;
+                }
+
+                // Remove from parent if already attached
+                if (panelView.getParent() != null) {
+                    Log.d(TAG, "panelView already has parent, removing first");
+                    windowManager.removeView(panelView);
+                }
 
                 DisplayMetrics metrics = getResources().getDisplayMetrics();
                 int panelHeight = metrics.heightPixels / 4;
+                Log.d(TAG, "Panel height: " + panelHeight + ", screen: " + metrics.heightPixels);
 
                 WindowManager.LayoutParams panelParams = new WindowManager.LayoutParams(
                         WindowManager.LayoutParams.MATCH_PARENT,
@@ -207,10 +221,10 @@ public class OverlayService extends Service {
                         PixelFormat.TRANSLUCENT
                 );
                 panelParams.gravity = Gravity.BOTTOM;
-                panelParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 
                 windowManager.addView(panelView, panelParams);
                 isPanelVisible = true;
+                Log.d(TAG, "Panel shown");
             }
         } catch (Exception e) {
             Log.e(TAG, "togglePanel error", e);

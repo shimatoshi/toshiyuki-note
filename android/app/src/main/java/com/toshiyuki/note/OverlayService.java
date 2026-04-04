@@ -262,6 +262,13 @@ public class OverlayService extends Service {
                             + " (" + cm.sourceId() + ":" + cm.lineNumber() + ")");
                     return true;
                 }
+
+                @Override
+                public void onGeolocationPermissionsShowPrompt(String origin,
+                        android.webkit.GeolocationPermissions.Callback callback) {
+                    fileLog("Geolocation permission requested from: " + origin);
+                    callback.invoke(origin, true, false);
+                }
             });
 
             // Register JavaScript bridge for file-based storage
@@ -335,13 +342,18 @@ public class OverlayService extends Service {
 
     private void setupPanelDragHandle() {
         View dragHandle = panelView.findViewById(R.id.overlay_drag_handle);
-        if (dragHandle == null) return;
+        if (dragHandle == null) {
+            fileLog("drag handle NOT FOUND");
+            return;
+        }
+        fileLog("drag handle setup OK");
 
         dragHandle.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     panelDragStartY = (int) event.getRawY();
                     panelDragStartHeight = panelParams.height;
+                    fileLog("panel drag DOWN y=" + panelDragStartY + " h=" + panelDragStartHeight);
                     return true;
 
                 case MotionEvent.ACTION_MOVE:

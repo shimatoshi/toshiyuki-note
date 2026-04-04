@@ -20,11 +20,15 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ImageView;
+import android.net.Uri;
+import android.app.Activity;
+import android.content.Intent;
 
 import androidx.core.app.NotificationCompat;
 
@@ -324,7 +328,8 @@ public class OverlayService extends Service {
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                         PixelFormat.TRANSLUCENT
                 );
-                panelParams.gravity = Gravity.BOTTOM;
+                panelParams.gravity = Gravity.TOP | Gravity.START;
+                panelParams.y = metrics.heightPixels - panelHeight; // Bottom position
 
                 windowManager.addView(panelView, panelParams);
                 isPanelVisible = true;
@@ -352,25 +357,22 @@ public class OverlayService extends Service {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     panelDragStartY = (int) event.getRawY();
-                    panelDragStartHeight = panelParams.height;
-                    fileLog("panel drag DOWN y=" + panelDragStartY + " h=" + panelDragStartHeight);
+                    fileLog("panel drag DOWN y=" + panelDragStartY);
                     return true;
 
                 case MotionEvent.ACTION_MOVE:
-                    int dy = panelDragStartY - (int) event.getRawY();
-                    int newHeight = panelDragStartHeight + dy;
+                    int dy = (int) event.getRawY() - panelDragStartY;
+                    panelParams.y += dy;
+                    panelDragStartY = (int) event.getRawY();
 
-                    // Clamp between min (200dp) and max (80% of screen)
+                    // Clamp to screen
                     DisplayMetrics metrics = getResources().getDisplayMetrics();
-                    int minH = dpToPx(200);
-                    int maxH = (int) (metrics.heightPixels * 0.8);
-                    newHeight = Math.max(minH, Math.min(maxH, newHeight));
+                    panelParams.y = Math.max(0, Math.min(metrics.heightPixels - dpToPx(100), panelParams.y));
 
-                    panelParams.height = newHeight;
                     try {
                         windowManager.updateViewLayout(panelView, panelParams);
                     } catch (Exception e) {
-                        fileLog("panel resize error: " + e.getMessage());
+                        fileLog("panel move error: " + e.getMessage());
                     }
                     return true;
 

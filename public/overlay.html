@@ -465,69 +465,74 @@ function previewAttachment(att) {
   }
 }
 
-function pickImage() { $('imageInput').click(); }
-function pickFile() { $('fileInput').click(); }
-
-async function handleImage(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const base64 = await fileToBase64(file);
-  const attId = NotesBridge.saveImageAttachment(currentNbId, currentPage, base64, file.name);
-  if (attId) {
-    insertRef('画像', attachments.length + 1);
-    loadAttachments();
-  }
-  e.target.value = '';
+function pickImage() {
+  log('pickImage via NotesBridge');
+  window._onImagePicked = function(result) {
+    log('image picked: ' + (result.error || result.cancelled || result.name));
+    if (result.error || result.cancelled) { $('status').textContent = result.error || 'キャンセル'; return; }
+    const attId = NotesBridge.saveImageAttachment(currentNbId, currentPage, result.base64, result.name);
+    if (attId) {
+      insertRef('画像', attachments.length + 1);
+      loadAttachments();
+      $('status').textContent = '画像を追加しました';
+    }
+  };
+  NotesBridge.pickFile('image/*', 'window._onImagePicked');
 }
 
-async function handleFile(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const base64 = await fileToBase64(file);
-  const attId = NotesBridge.saveFileAttachment(currentNbId, currentPage, base64, file.name, file.type);
-  if (attId) {
-    insertRef('ファイル', attachments.length + 1);
-    loadAttachments();
-  }
-  e.target.value = '';
+function pickFile() {
+  log('pickFile via NotesBridge');
+  window._onFilePicked = function(result) {
+    log('file picked: ' + (result.error || result.cancelled || result.name));
+    if (result.error || result.cancelled) { $('status').textContent = result.error || 'キャンセル'; return; }
+    const attId = NotesBridge.saveFileAttachment(currentNbId, currentPage, result.base64, result.name, result.mimeType);
+    if (attId) {
+      insertRef('ファイル', attachments.length + 1);
+      loadAttachments();
+      $('status').textContent = 'ファイルを追加しました';
+    }
+  };
+  NotesBridge.pickFile('*/*', 'window._onFilePicked');
 }
 
 function addLocation() {
   $('status').textContent = '位置情報取得中...';
-  // Try NotesBridge first, fallback to navigator.geolocation
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const locData = {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          address: null
-        };
-        // Reverse geocode
-        try {
-          const resp = await fetch(
-            'https://nominatim.openstreetmap.org/reverse?format=json&lat=' +
-            locData.latitude + '&lon=' + locData.longitude + '&accept-language=ja',
-            { headers: { 'User-Agent': 'ToshiyukiNote/1.0' } }
-          );
-          const addr = await resp.json();
-          locData.address = addr;
-        } catch (e) { /* ignore geocoding error */ }
+  log('addLocation called');
 
-        const attId = NotesBridge.saveLocationAttachment(currentNbId, currentPage, JSON.stringify(locData));
-        if (attId) {
-          insertRef('現在地', attachments.length + 1);
-          loadAttachments();
-        }
-        $('status').textContent = '位置情報を追加しました';
-      },
-      (err) => { $('status').textContent = '位置取得失敗: ' + err.message; },
-      { enableHighAccuracy: true, timeout: 30000 }
-    );
-  } else {
-    $('status').textContent = '位置情報非対応';
-  }
+  // Use NotesBridge native location (Android LocationManager)
+  window._onLocationResult = async function(result) {
+    log('location result: ' + JSON.stringify(result));
+    if (result.error) {
+      $('status').textContent = '位置取得失敗: ' + result.error;
+      return;
+    }
+
+    const locData = {
+      latitude: result.latitude,
+      longitude: result.longitude,
+      accuracy: result.accuracy,
+      address: null
+    };
+
+    // Reverse geocode
+    try {
+      const resp = await fetch(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=' +
+        locData.latitude + '&lon=' + locData.longitude + '&accept-language=ja',
+        { headers: { 'User-Agent': 'ToshiyukiNote/1.0' } }
+      );
+      locData.address = await resp.json();
+    } catch (e) { log('geocode error: ' + e.message); }
+
+    const attId = NotesBridge.saveLocationAttachment(currentNbId, currentPage, JSON.stringify(locData));
+    if (attId) {
+      insertRef('現在地', attachments.length + 1);
+      loadAttachments();
+    }
+    $('status').textContent = '位置情報を追加しました';
+  };
+
+  NotesBridge.getLocation('window._onLocationResult');
 }
 
 function insertRef(label, num) {

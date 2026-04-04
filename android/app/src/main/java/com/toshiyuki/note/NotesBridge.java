@@ -1,6 +1,12 @@
 package com.toshiyuki.note;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
@@ -8,6 +14,8 @@ import android.util.Base64;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+
+import androidx.core.content.ContextCompat;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -414,13 +422,134 @@ public class NotesBridge {
     // ==========================================
 
     @JavascriptInterface
-    public void getLocation(String callbackName) {
-        // Will be enhanced in Phase 3 with FusedLocationProvider
-        // For now, use a simple approach
-        mainHandler.post(() -> {
-            String js = callbackName + "({\"error\": \"Location not yet implemented in NotesBridge\"})";
-            webView.evaluateJavascript(js, null);
+    public void pickFile(String accept, String callbackName) {
+        Log.d(TAG, "pickFile called, accept=" + accept + ", callback=" + callbackName);
+
+        FilePickerActivity.setCallback(new FilePickerActivity.FilePickerCallback() {
+            @Override
+            public void onFilePicked(android.net.Uri uri, String fileName, String mimeType) {
+                try {
+                    java.io.InputStream is = context.getContentResolver().openInputStream(uri);
+                    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                    is.close();
+
+                    String base64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
+                    String escapedName = fileName != null ? fileName.replace("'", "\\'") : "file";
+                    String escapedMime = mimeType != null ? mimeType : "application/octet-stream";
+
+                    mainHandler.post(() -> {
+                        String js = callbackName + "({\"base64\":\"" + base64
+                                + "\",\"name\":\"" + escapedName
+                                + "\",\"mimeType\":\"" + escapedMime + "\"})";
+                        webView.evaluateJavascript(js, null);
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "pickFile read error", e);
+                    mainHandler.post(() -> {
+                        webView.evaluateJavascript(callbackName + "({\"error\":\"" + e.getMessage() + "\"})", null);
+                    });
+                }
+            }
+
+            @Override
+            public void onPickCancelled() {
+                mainHandler.post(() -> {
+                    webView.evaluateJavascript(callbackName + "({\"cancelled\":true})", null);
+                });
+            }
         });
+
+        android.content.Intent intent = new android.content.Intent(context, FilePickerActivity.class);
+        intent.putExtra("accept", accept);
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        context.startActivity(intent);
+    }
+
+    @JavascriptInterface
+    public void getLocation(String callbackName) {
+        Log.d(TAG, "getLocation called, callback=" + callbackName);
+
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            mainHandler.post(() -> {
+                String js = callbackName + "({\"error\": \"Location permission not granted\"})";
+                webView.evaluateJavascript(js, null);
+            });
+            return;
+        }
+
+        LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        if (lm == null) {
+            mainHandler.post(() -> {
+                String js = callbackName + "({\"error\": \"LocationManager unavailable\"})";
+                webView.evaluateJavascript(js, null);
+            });
+            return;
+        }
+
+        // Try last known location first
+        Location last = null;
+        try {
+            last = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (last == null) last = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+        } catch (SecurityException e) {
+            Log.e(TAG, "getLastKnownLocation error", e);
+        }
+
+        if (last != null && (System.currentTimeMillis() - last.getTime()) < 300000) {
+            // Use cached location if less than 5 minutes old
+            final Location loc = last;
+            mainHandler.post(() -> {
+                String js = callbackName + "({\"latitude\":" + loc.getLatitude()
+                        + ",\"longitude\":" + loc.getLongitude()
+                        + ",\"accuracy\":" + loc.getAccuracy() + "})";
+                webView.evaluateJavascript(js, null);
+            });
+            return;
+        }
+
+        // Request fresh location
+        String provider = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
+
+        try {
+            lm.requestSingleUpdate(provider, new LocationListener() {
+                @Override
+                public void onLocationChanged(Location loc) {
+                    mainHandler.post(() -> {
+                        String js = callbackName + "({\"latitude\":" + loc.getLatitude()
+                                + ",\"longitude\":" + loc.getLongitude()
+                                + ",\"accuracy\":" + loc.getAccuracy() + "})";
+                        webView.evaluateJavascript(js, null);
+                    });
+                }
+                @Override public void onStatusChanged(String p, int s, Bundle e) {}
+                @Override public void onProviderEnabled(String p) {}
+                @Override public void onProviderDisabled(String p) {
+                    mainHandler.post(() -> {
+                        String js = callbackName + "({\"error\": \"Provider disabled: " + p + "\"})";
+                        webView.evaluateJavascript(js, null);
+                    });
+                }
+            }, Looper.getMainLooper());
+
+            // Timeout after 15 seconds
+            mainHandler.postDelayed(() -> {
+                mainHandler.post(() -> {
+                    String js = callbackName + "({\"error\": \"Location timeout\"})";
+                    webView.evaluateJavascript(js, null);
+                });
+            }, 15000);
+
+        } catch (SecurityException e) {
+            mainHandler.post(() -> {
+                String js = callbackName + "({\"error\": \"" + e.getMessage() + "\"})";
+                webView.evaluateJavascript(js, null);
+            });
+        }
     }
 
     // ==========================================

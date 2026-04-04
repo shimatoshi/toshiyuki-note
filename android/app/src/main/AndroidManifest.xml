@@ -25,6 +25,11 @@
 
         </activity>
 
+        <activity
+            android:name=".FilePickerActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false" />
+
         <service
             android:name=".OverlayService"
             android:exported="false"

@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { TOTAL_PAGES } from '../types'
 import type { Notebook, NotebookMetadata, Page } from '../types'
-import { db } from '../db'
+import { fileDb, initStorage, migrateFromIndexedDB } from '../fileStorage'
+
+// Use file-based storage
+const db = fileDb
+
 // Old keys for migration
 const LEGACY_METADATA_KEY = 'toshiyuki-notebooks-metadata'
 const LEGACY_NOTEBOOK_PREFIX = 'toshiyuki-notebook-'
@@ -76,7 +80,11 @@ export const useNotebooks = () => {
     const init = async () => {
       try {
         console.log('Starting init...')
-        // 1. DB Init
+        // 0. Init file storage + migrate from IndexedDB
+        await initStorage()
+        await migrateFromIndexedDB()
+
+        // 1. Load metadata
         const allMetadata = await db.getAllMetadata().catch(() => [])
         setNotebooks(allMetadata)
 
@@ -109,17 +117,7 @@ export const useNotebooks = () => {
             localStorage.setItem(INDEX_BUILT_KEY, 'true')
           }
 
-          // ストレージ残量チェック
-          if (navigator.storage && navigator.storage.estimate) {
-            const estimate = await navigator.storage.estimate()
-            if (estimate.quota && estimate.usage) {
-              const usagePercent = (estimate.usage / estimate.quota) * 100
-              const remainingMB = Math.round((estimate.quota - estimate.usage) / 1024 / 1024)
-              if (usagePercent > 80) {
-                alert(`ストレージの残り容量が少なくなっています（残り約${remainingMB}MB）。\n不要なノートを削除するか、ZIPで保存してからデータを整理してください。`)
-              }
-            }
-          }
+          // File-based storage: no quota check needed
         } catch (e) {
           console.error('Background task error:', e)
         }

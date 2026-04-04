@@ -3,262 +3,564 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Quick Memo</title>
+<title>としゆきノート</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
-  height: 100%;
-  background: #1a1a1a;
-  color: #e0e0e0;
-  font-family: -apple-system, sans-serif;
-  overflow: hidden;
+  height: 100%; background: #1a1a1a; color: #e0e0e0;
+  font-family: -apple-system, sans-serif; overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
-.container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 4px 8px 8px;
-}
+.container { display: flex; flex-direction: column; height: 100%; }
+
+/* Header */
 .header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0 4px;
-  flex-shrink: 0;
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 6px; flex-shrink: 0; background: #222;
+  border-bottom: 1px solid #333;
 }
 .header select {
-  flex: 1;
-  background: #2a2a2a;
-  color: #e0e0e0;
-  border: 1px solid #444;
-  border-radius: 4px;
-  padding: 4px 6px;
-  font-size: 13px;
+  flex: 1; background: #2a2a2a; color: #e0e0e0;
+  border: 1px solid #444; border-radius: 4px;
+  padding: 3px 4px; font-size: 12px; min-width: 0;
 }
-.header .page-info {
-  font-size: 11px;
-  color: #888;
-  white-space: nowrap;
+.page-nav {
+  display: flex; align-items: center; gap: 2px;
+  font-size: 11px; color: #888;
 }
-.header button {
-  background: #1E88E5;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
+.btn {
+  background: #333; color: #ccc; border: none; border-radius: 4px;
+  padding: 4px 8px; font-size: 12px; cursor: pointer;
+  touch-action: manipulation;
 }
-.header button:active { background: #1565C0; }
-.header button.new-btn {
-  background: #43A047;
-  padding: 4px 8px;
-  font-size: 14px;
-  font-weight: bold;
-}
+.btn:active { background: #555; }
+.btn-primary { background: #1E88E5; color: white; }
+.btn-primary:active { background: #1565C0; }
+.btn-green { background: #43A047; color: white; }
+.btn-icon { padding: 4px 6px; font-size: 14px; }
+
+/* Editor */
+.editor-wrap { flex: 1; position: relative; overflow: hidden; }
 textarea {
-  flex: 1;
-  background: #222;
-  color: #e0e0e0;
-  border: 1px solid #444;
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 14px;
-  line-height: 1.5;
-  resize: none;
-  outline: none;
-  font-family: inherit;
+  width: 100%; height: 100%; background: #222; color: #e0e0e0;
+  border: none; padding: 6px 8px; font-size: 15px; line-height: 2.0;
+  resize: none; outline: none; font-family: inherit;
 }
-textarea:focus { border-color: #1E88E5; }
-.status {
-  font-size: 10px;
-  color: #666;
-  text-align: right;
-  padding: 2px 0 0;
-  flex-shrink: 0;
+textarea.ruled {
+  background-image: linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px);
+  background-size: 100% 2.0em;
+  background-attachment: local;
 }
+
+/* Footer */
+.footer {
+  display: flex; align-items: center; gap: 2px;
+  padding: 3px 6px; flex-shrink: 0; background: #222;
+  border-top: 1px solid #333;
+}
+.footer-left { font-size: 10px; color: #666; flex-shrink: 0; }
+.footer-right { display: flex; gap: 2px; margin-left: auto; }
+
+/* Attachments bar */
+.att-bar {
+  display: flex; gap: 4px; padding: 4px 6px; background: #252525;
+  overflow-x: auto; flex-shrink: 0; border-top: 1px solid #333;
+}
+.att-bar:empty { display: none; }
+.att-thumb {
+  width: 40px; height: 40px; border-radius: 4px; background: #333;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: #aaa; overflow: hidden; position: relative; cursor: pointer;
+}
+.att-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.att-badge {
+  position: absolute; top: 0; right: 0; background: #1E88E5;
+  color: white; font-size: 8px; padding: 0 3px; border-radius: 0 4px 0 4px;
+}
+
+/* Search overlay */
+.search-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: #1a1a1a; z-index: 100; display: none;
+  flex-direction: column;
+}
+.search-overlay.active { display: flex; }
+.search-bar {
+  display: flex; gap: 4px; padding: 6px;
+  background: #222; border-bottom: 1px solid #333;
+}
+.search-bar input {
+  flex: 1; background: #2a2a2a; color: #e0e0e0;
+  border: 1px solid #444; border-radius: 4px;
+  padding: 6px 8px; font-size: 14px; outline: none;
+}
+.search-results {
+  flex: 1; overflow-y: auto; padding: 4px;
+}
+.search-result {
+  padding: 8px; border-bottom: 1px solid #333; cursor: pointer;
+}
+.search-result:active { background: #333; }
+.search-result .title { font-size: 12px; color: #bb86fc; }
+.search-result .snippet { font-size: 11px; color: #888; margin-top: 2px; }
+.search-result .page { font-size: 10px; color: #666; }
+
+/* Hidden file inputs */
+.hidden-input { display: none; }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
-    <select id="notebookSelect"></select>
-    <span class="page-info" id="pageInfo">p.1</span>
-    <button onclick="prevPage()">&#9664;</button>
-    <button onclick="nextPage()">&#9654;</button>
-    <button class="new-btn" onclick="newQuickNote()">+</button>
+    <select id="nbSelect" onchange="switchNotebook()"></select>
+    <div class="page-nav">
+      <button class="btn btn-icon" onclick="prevPage()">◀</button>
+      <span id="pageInfo">1/100</span>
+      <button class="btn btn-icon" onclick="nextPage()">▶</button>
+    </div>
+    <button class="btn btn-green btn-icon" onclick="createNote()" title="新規">+</button>
+    <button class="btn btn-icon" onclick="toggleLines()" id="linesBtn" title="罫線">≡</button>
   </div>
-  <textarea id="editor" placeholder="メモを入力..."></textarea>
-  <div class="status" id="status">ready</div>
+
+  <div class="att-bar" id="attBar"></div>
+
+  <div class="editor-wrap">
+    <textarea id="editor" placeholder="メモを入力..."></textarea>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left" id="status">ready</div>
+    <div class="footer-right">
+      <button class="btn btn-icon" onclick="insertTimestamp()" title="時刻">🕐</button>
+      <button class="btn btn-icon" onclick="pickImage()" title="画像">📷</button>
+      <button class="btn btn-icon" onclick="pickFile()" title="ファイル">📎</button>
+      <button class="btn btn-icon" onclick="addLocation()" title="位置">📍</button>
+      <button class="btn btn-icon" onclick="openSearch()" title="検索">🔍</button>
+    </div>
+  </div>
 </div>
 
-<script>
-const DB_NAME = 'toshiyuki-db';
-const DB_VERSION = 2;
-let db = null;
-let currentNotebook = null;
-let currentPage = 0;
-let saveTimer = null;
+<!-- Search overlay -->
+<div class="search-overlay" id="searchOverlay">
+  <div class="search-bar">
+    <input id="searchInput" placeholder="検索..." oninput="doSearch()">
+    <button class="btn" onclick="closeSearch()">✕</button>
+  </div>
+  <div class="search-results" id="searchResults"></div>
+</div>
 
-async function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('metadata')) db.createObjectStore('metadata', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('notebooks')) db.createObjectStore('notebooks', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('calendar_index')) db.createObjectStore('calendar_index');
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+<!-- Hidden inputs -->
+<input type="file" class="hidden-input" id="imageInput" accept="image/*" onchange="handleImage(event)">
+<input type="file" class="hidden-input" id="fileInput" onchange="handleFile(event)">
+
+<script>
+// State
+let notebooks = [];
+let currentNbId = null;
+let currentMeta = null;
+let currentPage = 1;
+let totalPages = 100;
+let showLines = false;
+let saveTimer = null;
+let attachments = []; // current page attachments
+
+const $ = id => document.getElementById(id);
+
+// ==========================================
+// Init
+// ==========================================
+async function init() {
+  try {
+    if (typeof NotesBridge === 'undefined') {
+      $('status').textContent = 'error: NotesBridge not available';
+      return;
+    }
+    await loadNotebookList();
+    $('status').textContent = 'ready';
+  } catch (e) {
+    $('status').textContent = 'error: ' + e.message;
+  }
 }
 
+// ==========================================
+// Notebook management
+// ==========================================
 async function loadNotebookList() {
-  const tx = db.transaction('metadata', 'readonly');
-  const store = tx.objectStore('metadata');
-  const all = await new Promise((res, rej) => {
-    const r = store.getAll();
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
+  const raw = NotesBridge.listNotebooks();
+  notebooks = JSON.parse(raw);
 
-  all.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
-
-  const sel = document.getElementById('notebookSelect');
+  const sel = $('nbSelect');
   sel.innerHTML = '';
-  for (const m of all) {
+  for (const nb of notebooks) {
     const opt = document.createElement('option');
-    opt.value = m.id;
-    opt.textContent = m.title;
+    opt.value = nb.id;
+    opt.textContent = nb.title;
     sel.appendChild(opt);
   }
 
-  if (all.length > 0) {
-    sel.value = all[0].id;
-    await loadNotebook(all[0].id);
+  if (notebooks.length > 0) {
+    currentNbId = notebooks[0].id;
+    sel.value = currentNbId;
+    await loadNotebook(currentNbId);
+  } else {
+    // Create first notebook
+    await createNote();
   }
 }
 
 async function loadNotebook(id) {
-  const tx = db.transaction('notebooks', 'readonly');
-  const store = tx.objectStore('notebooks');
-  const nb = await new Promise((res, rej) => {
-    const r = store.get(id);
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
+  currentNbId = id;
+  const raw = NotesBridge.getNotebookMeta(id);
+  currentMeta = JSON.parse(raw);
+  currentPage = currentMeta.currentPage || 1;
+  totalPages = currentMeta.totalPages || 100;
+  showLines = currentMeta.showLines || false;
+  applyLines();
+  await loadPage();
+}
 
-  if (nb) {
-    currentNotebook = nb;
-    currentPage = 0;
-    showPage();
+async function loadPage() {
+  if (!currentNbId) return;
+  const content = NotesBridge.getPage(currentNbId, currentPage);
+  $('editor').value = content || '';
+  updatePageInfo();
+  loadAttachments();
+}
+
+function updatePageInfo() {
+  $('pageInfo').textContent = currentPage + '/' + totalPages;
+}
+
+async function switchNotebook() {
+  await saveCurrent();
+  const id = $('nbSelect').value;
+  await loadNotebook(id);
+}
+
+async function createNote() {
+  const title = 'メモ ' + new Date().toLocaleString('ja-JP', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+  const id = NotesBridge.createNotebook(title);
+  if (id) {
+    await loadNotebookList();
+    $('nbSelect').value = id;
+    await loadNotebook(id);
+    $('editor').focus();
   }
 }
 
-function showPage() {
-  if (!currentNotebook) return;
-  const page = currentNotebook.pages[currentPage];
-  document.getElementById('editor').value = page ? page.content : '';
-  document.getElementById('pageInfo').textContent =
-    'p.' + (currentPage + 1) + '/' + currentNotebook.pages.length;
-}
-
+// ==========================================
+// Page navigation
+// ==========================================
 function prevPage() {
-  if (currentPage > 0) {
-    saveCurrentPage();
+  if (currentPage > 1) {
+    saveCurrent();
     currentPage--;
-    showPage();
+    loadPage();
   }
 }
 
 function nextPage() {
-  if (currentNotebook && currentPage < currentNotebook.pages.length - 1) {
-    saveCurrentPage();
+  if (currentPage < totalPages) {
+    saveCurrent();
     currentPage++;
-    showPage();
+    loadPage();
   }
 }
 
-function saveCurrentPage() {
-  if (!currentNotebook) return;
-  const editor = document.getElementById('editor');
-  const page = currentNotebook.pages[currentPage];
-  if (page) {
-    page.content = editor.value;
-    page.lastModified = new Date().toISOString();
+// ==========================================
+// Save
+// ==========================================
+function saveCurrent() {
+  if (!currentNbId) return;
+  const content = $('editor').value;
+  NotesBridge.savePage(currentNbId, currentPage, content);
+
+  // Save currentPage to meta
+  if (currentMeta) {
+    currentMeta.currentPage = currentPage;
+    NotesBridge.updateNotebookMeta(currentNbId, JSON.stringify(currentMeta));
   }
 }
 
-async function persistNotebook() {
-  if (!currentNotebook) return;
-  saveCurrentPage();
-
-  const tx = db.transaction(['notebooks', 'metadata'], 'readwrite');
-  tx.objectStore('notebooks').put(currentNotebook);
-  tx.objectStore('metadata').put({
-    id: currentNotebook.id,
-    title: currentNotebook.title,
-    createdAt: currentNotebook.createdAt,
-    lastModified: new Date().toISOString()
-  });
-
-  await new Promise((res, rej) => {
-    tx.oncomplete = res;
-    tx.onerror = () => rej(tx.error);
-  });
-
-  document.getElementById('status').textContent = 'saved ' + new Date().toLocaleTimeString();
-}
-
-function newQuickNote() {
-  const id = 'nb_' + Date.now();
-  const now = new Date().toISOString();
-  const pages = [];
-  for (let i = 0; i < 100; i++) {
-    pages.push({ pageNumber: i + 1, content: '', attachments: [] });
-  }
-  currentNotebook = {
-    id,
-    title: 'Quick ' + new Date().toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-    createdAt: now,
-    pages
-  };
-  currentPage = 0;
-
-  const sel = document.getElementById('notebookSelect');
-  const opt = document.createElement('option');
-  opt.value = id;
-  opt.textContent = currentNotebook.title;
-  sel.prepend(opt);
-  sel.value = id;
-
-  showPage();
-  persistNotebook();
-  document.getElementById('editor').focus();
-}
-
-// Auto-save on typing
-document.getElementById('editor').addEventListener('input', () => {
+function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(persistNotebook, 800);
-});
+  saveTimer = setTimeout(() => {
+    saveCurrent();
+    $('status').textContent = 'saved ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }, 800);
+}
 
-document.getElementById('notebookSelect').addEventListener('change', async (e) => {
-  await persistNotebook();
-  await loadNotebook(e.target.value);
-});
+// ==========================================
+// Ruled lines
+// ==========================================
+function applyLines() {
+  const editor = $('editor');
+  if (showLines) {
+    editor.classList.add('ruled');
+    $('linesBtn').style.color = '#bb86fc';
+  } else {
+    editor.classList.remove('ruled');
+    $('linesBtn').style.color = '#ccc';
+  }
+}
+
+function toggleLines() {
+  showLines = !showLines;
+  applyLines();
+  if (currentMeta) {
+    currentMeta.showLines = showLines;
+    NotesBridge.updateNotebookMeta(currentNbId, JSON.stringify(currentMeta));
+  }
+}
+
+// ==========================================
+// Timestamp
+// ==========================================
+function insertTimestamp() {
+  const editor = $('editor');
+  const now = new Date().toLocaleString('ja-JP');
+  const pos = editor.selectionStart;
+  const text = editor.value;
+  editor.value = text.slice(0, pos) + '\n[' + now + ']\n' + text.slice(pos);
+  editor.selectionStart = editor.selectionEnd = pos + now.length + 4;
+  editor.focus();
+  scheduleSave();
+}
+
+// ==========================================
+// Attachments
+// ==========================================
+function loadAttachments() {
+  if (!currentNbId) return;
+  const raw = NotesBridge.getAttachments(currentNbId, currentPage);
+  attachments = JSON.parse(raw);
+  renderAttachments();
+}
+
+function renderAttachments() {
+  const bar = $('attBar');
+  bar.innerHTML = '';
+  attachments.forEach((att, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'att-thumb';
+    thumb.onclick = () => previewAttachment(att);
+
+    if (att.type === 'image') {
+      const dataUrl = NotesBridge.getAttachmentDataUrl(currentNbId, att.id, att.ext);
+      if (dataUrl) {
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        thumb.appendChild(img);
+      } else {
+        thumb.textContent = '📷';
+      }
+    } else if (att.type === 'location') {
+      thumb.textContent = '📍';
+    } else {
+      thumb.textContent = '📎';
+    }
+
+    const badge = document.createElement('div');
+    badge.className = 'att-badge';
+    badge.textContent = i + 1;
+    thumb.appendChild(badge);
+
+    bar.appendChild(thumb);
+  });
+}
+
+function previewAttachment(att) {
+  if (att.type === 'location') {
+    const data = NotesBridge.getAttachmentDataUrl(currentNbId, att.id, '.json');
+    if (data) {
+      const loc = JSON.parse(data);
+      const url = 'https://maps.google.com/maps?q=' + loc.latitude + ',' + loc.longitude;
+      if (confirm('位置: ' + (loc.address?.display_name || loc.latitude + ',' + loc.longitude) + '\n\nGoogle Mapsで開く？')) {
+        window.open(url);
+      }
+    }
+  } else if (att.type === 'image') {
+    const dataUrl = NotesBridge.getAttachmentDataUrl(currentNbId, att.id, att.ext);
+    if (dataUrl) {
+      // Simple image preview
+      const w = window.open('');
+      w.document.write('<img src="' + dataUrl + '" style="max-width:100%">');
+    }
+  }
+}
+
+function pickImage() { $('imageInput').click(); }
+function pickFile() { $('fileInput').click(); }
+
+async function handleImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const base64 = await fileToBase64(file);
+  const attId = NotesBridge.saveImageAttachment(currentNbId, currentPage, base64, file.name);
+  if (attId) {
+    insertRef('画像', attachments.length + 1);
+    loadAttachments();
+  }
+  e.target.value = '';
+}
+
+async function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const base64 = await fileToBase64(file);
+  const attId = NotesBridge.saveFileAttachment(currentNbId, currentPage, base64, file.name, file.type);
+  if (attId) {
+    insertRef('ファイル', attachments.length + 1);
+    loadAttachments();
+  }
+  e.target.value = '';
+}
+
+function addLocation() {
+  $('status').textContent = '位置情報取得中...';
+  // Try NotesBridge first, fallback to navigator.geolocation
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const locData = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          address: null
+        };
+        // Reverse geocode
+        try {
+          const resp = await fetch(
+            'https://nominatim.openstreetmap.org/reverse?format=json&lat=' +
+            locData.latitude + '&lon=' + locData.longitude + '&accept-language=ja',
+            { headers: { 'User-Agent': 'ToshiyukiNote/1.0' } }
+          );
+          const addr = await resp.json();
+          locData.address = addr;
+        } catch (e) { /* ignore geocoding error */ }
+
+        const attId = NotesBridge.saveLocationAttachment(currentNbId, currentPage, JSON.stringify(locData));
+        if (attId) {
+          insertRef('現在地', attachments.length + 1);
+          loadAttachments();
+        }
+        $('status').textContent = '位置情報を追加しました';
+      },
+      (err) => { $('status').textContent = '位置取得失敗: ' + err.message; },
+      { enableHighAccuracy: true, timeout: 30000 }
+    );
+  } else {
+    $('status').textContent = '位置情報非対応';
+  }
+}
+
+function insertRef(label, num) {
+  const editor = $('editor');
+  const pos = editor.selectionStart || editor.value.length;
+  const text = editor.value;
+  const ref = ' (' + label + num + ') ';
+  editor.value = text.slice(0, pos) + ref + text.slice(pos);
+  editor.focus();
+  scheduleSave();
+}
+
+// ==========================================
+// Search
+// ==========================================
+function openSearch() {
+  $('searchOverlay').classList.add('active');
+  $('searchInput').focus();
+}
+
+function closeSearch() {
+  $('searchOverlay').classList.remove('active');
+  $('searchInput').value = '';
+  $('searchResults').innerHTML = '';
+}
+
+function doSearch() {
+  const query = $('searchInput').value.trim();
+  if (!query) { $('searchResults').innerHTML = ''; return; }
+
+  const raw = NotesBridge.search(query);
+  const results = JSON.parse(raw);
+
+  const container = $('searchResults');
+  container.innerHTML = '';
+
+  if (results.length === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">見つかりませんでした</div>';
+    return;
+  }
+
+  results.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'search-result';
+    div.innerHTML = '<div class="title">' + escHtml(r.notebookTitle) + '</div>'
+      + '<div class="page">p.' + r.pageNumber + '</div>'
+      + '<div class="snippet">' + escHtml(r.snippet) + '</div>';
+    div.onclick = async () => {
+      closeSearch();
+      // Switch to that notebook and page
+      $('nbSelect').value = r.notebookId;
+      await loadNotebook(r.notebookId);
+      currentPage = r.pageNumber;
+      await loadPage();
+    };
+    container.appendChild(div);
+  });
+}
+
+// ==========================================
+// Swipe gesture for page navigation
+// ==========================================
+let touchStartX = 0;
+let touchStartY = 0;
+
+$('editor').addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+$('editor').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 2) {
+    if (dx > 0) prevPage();
+    else nextPage();
+  }
+}, { passive: true });
+
+// ==========================================
+// Utilities
+// ==========================================
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      resolve(result.split(',')[1]); // Remove data URL prefix
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ==========================================
+// Event listeners
+// ==========================================
+$('editor').addEventListener('input', scheduleSave);
 
 // Init
-(async () => {
-  try {
-    db = await openDB();
-    await loadNotebookList();
-    document.getElementById('status').textContent = 'ready';
-  } catch (e) {
-    document.getElementById('status').textContent = 'error: ' + e.message;
-  }
-})();
+init();
 </script>
 </body>
 </html>

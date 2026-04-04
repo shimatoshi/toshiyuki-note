@@ -13,7 +13,7 @@
         android:padding="6dp"
         android:src="@drawable/ic_close"
         android:contentDescription="閉じる"
-        android:background="?attr/selectableItemBackgroundBorderless" />
+        android:background="#33FFFFFF" />
 
     <WebView
         android:id="@+id/overlay_webview"

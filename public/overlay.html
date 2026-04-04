@@ -105,6 +105,32 @@ textarea.ruled {
 .search-result .snippet { font-size: 11px; color: #888; margin-top: 2px; }
 .search-result .page { font-size: 10px; color: #666; }
 
+/* Custom dropdown (select doesn't work in overlay WebView) */
+.nb-picker {
+  flex: 1; position: relative; min-width: 0;
+}
+.nb-picker-btn {
+  width: 100%; background: #2a2a2a; color: #e0e0e0;
+  border: 1px solid #444; border-radius: 4px;
+  padding: 3px 20px 3px 6px; font-size: 12px; text-align: left;
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nb-picker-btn::after {
+  content: '▼'; position: absolute; right: 6px; top: 50%;
+  transform: translateY(-50%); font-size: 8px; color: #888;
+}
+.nb-dropdown {
+  display: none; position: absolute; top: 100%; left: 0; right: 0;
+  background: #2a2a2a; border: 1px solid #444; border-radius: 4px;
+  max-height: 200px; overflow-y: auto; z-index: 50;
+}
+.nb-dropdown.open { display: block; }
+.nb-dropdown-item {
+  padding: 8px; font-size: 12px; cursor: pointer;
+  border-bottom: 1px solid #333;
+}
+.nb-dropdown-item:active, .nb-dropdown-item.selected { background: #444; }
+
 /* Hidden file inputs */
 .hidden-input { display: none; }
 </style>
@@ -112,7 +138,10 @@ textarea.ruled {
 <body>
 <div class="container">
   <div class="header">
-    <select id="nbSelect" onchange="switchNotebook()"></select>
+    <div class="nb-picker">
+      <div class="nb-picker-btn" id="nbPickerBtn" onclick="toggleNbDropdown()">ノート</div>
+      <div class="nb-dropdown" id="nbDropdown"></div>
+    </div>
     <div class="page-nav">
       <button class="btn btn-icon" onclick="prevPage()">◀</button>
       <span id="pageInfo">1/100</span>
@@ -211,23 +240,48 @@ async function loadNotebookList() {
   log('listNotebooks returned: ' + raw.substring(0, 200));
   notebooks = JSON.parse(raw);
 
-  const sel = $('nbSelect');
-  sel.innerHTML = '';
-  for (const nb of notebooks) {
-    const opt = document.createElement('option');
-    opt.value = nb.id;
-    opt.textContent = nb.title;
-    sel.appendChild(opt);
-  }
+  renderNbDropdown();
 
   if (notebooks.length > 0) {
     currentNbId = notebooks[0].id;
-    sel.value = currentNbId;
+    $('nbPickerBtn').textContent = notebooks[0].title;
     await loadNotebook(currentNbId);
   } else {
-    // Create first notebook
     await createNote();
   }
+}
+
+function renderNbDropdown() {
+  const dd = $('nbDropdown');
+  dd.innerHTML = '';
+  for (const nb of notebooks) {
+    const item = document.createElement('div');
+    item.className = 'nb-dropdown-item' + (nb.id === currentNbId ? ' selected' : '');
+    item.textContent = nb.title;
+    item.onclick = function(e) {
+      e.stopPropagation();
+      closeNbDropdown();
+      selectNotebook(nb.id);
+    };
+    dd.appendChild(item);
+  }
+}
+
+function toggleNbDropdown() {
+  const dd = $('nbDropdown');
+  dd.classList.toggle('open');
+}
+
+function closeNbDropdown() {
+  $('nbDropdown').classList.remove('open');
+}
+
+async function selectNotebook(id) {
+  log('selectNotebook: ' + id);
+  await saveCurrent();
+  const nb = notebooks.find(n => n.id === id);
+  if (nb) $('nbPickerBtn').textContent = nb.title;
+  await loadNotebook(id);
 }
 
 async function loadNotebook(id) {
@@ -255,20 +309,15 @@ function updatePageInfo() {
   $('pageInfo').textContent = currentPage + '/' + totalPages;
 }
 
-async function switchNotebook() {
-  await saveCurrent();
-  const id = $('nbSelect').value;
-  await loadNotebook(id);
-}
-
 async function createNote() {
   const title = 'メモ ' + new Date().toLocaleString('ja-JP', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
   });
+  log('createNote: ' + title);
   const id = NotesBridge.createNotebook(title);
   if (id) {
     await loadNotebookList();
-    $('nbSelect').value = id;
+    $('nbPickerBtn').textContent = title;
     await loadNotebook(id);
     $('editor').focus();
   }
@@ -583,6 +632,11 @@ function escHtml(s) {
 // Event listeners
 // ==========================================
 $('editor').addEventListener('input', scheduleSave);
+
+// Close dropdown when tapping elsewhere
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.nb-picker')) closeNbDropdown();
+});
 
 // Init
 init();

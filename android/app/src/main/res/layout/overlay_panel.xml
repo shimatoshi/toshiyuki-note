@@ -1,23 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#E0121212">
+    android:orientation="vertical"
+    android:background="#F0121212">
 
-    <ImageView
-        android:id="@+id/overlay_close_btn"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:layout_gravity="top|end"
-        android:layout_margin="4dp"
-        android:padding="6dp"
-        android:src="@drawable/ic_close"
-        android:contentDescription="閉じる"
-        android:background="#33FFFFFF" />
+    <!-- Drag handle bar -->
+    <FrameLayout
+        android:id="@+id/overlay_drag_handle"
+        android:layout_width="match_parent"
+        android:layout_height="24dp"
+        android:background="#222222">
+
+        <!-- Handle indicator -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center"
+            android:background="#555555" />
+
+        <!-- Close button -->
+        <ImageView
+            android:id="@+id/overlay_close_btn"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="8dp"
+            android:padding="4dp"
+            android:src="@drawable/ic_close"
+            android:contentDescription="閉じる"
+            android:background="#33FFFFFF" />
+    </FrameLayout>
 
     <WebView
         android:id="@+id/overlay_webview"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_marginTop="32dp" />
-</FrameLayout>
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

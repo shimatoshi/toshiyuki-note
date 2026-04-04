@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">としゆきノート</string>
+    <string name="title_activity_main">としゆきノート</string>
+    <string name="package_name">com.toshiyuki.note</string>
+    <string name="custom_url_scheme">com.toshiyuki.note</string>
+</resources>

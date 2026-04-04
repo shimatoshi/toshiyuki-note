@@ -2,11 +2,13 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const isCapacitor = process.env.CAPACITOR_BUILD === 'true'
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    VitePWA({
+    ...(!isCapacitor ? [VitePWA({
       registerType: 'autoUpdate',
       workbox: {
         skipWaiting: true,
@@ -43,6 +45,6 @@ export default defineConfig({
           }
         ]
       }
-    })
+    })] : []),
   ],
 })

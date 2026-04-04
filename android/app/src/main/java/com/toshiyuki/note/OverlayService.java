@@ -254,7 +254,15 @@ public class OverlayService extends Service {
             settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
             webView.setWebViewClient(new WebViewClient());
-            webView.setWebChromeClient(new WebChromeClient());
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public boolean onConsoleMessage(android.webkit.ConsoleMessage cm) {
+                    String level = cm.messageLevel().name();
+                    fileLog("JS[" + level + "] " + cm.message()
+                            + " (" + cm.sourceId() + ":" + cm.lineNumber() + ")");
+                    return true;
+                }
+            });
 
             // Register JavaScript bridge for file-based storage
             webView.addJavascriptInterface(new NotesBridge(this, webView), "NotesBridge");

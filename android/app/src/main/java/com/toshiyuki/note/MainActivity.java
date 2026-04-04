@@ -5,27 +5,41 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.Log;
 
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
 
+    private static final String TAG = "MainActivity";
     private static final int OVERLAY_PERMISSION_REQUEST = 1001;
+    private boolean serviceStarted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestOverlayPermissionAndStart();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (!serviceStarted) {
+            requestOverlayPermissionAndStart();
+        }
     }
 
     private void requestOverlayPermissionAndStart() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!Settings.canDrawOverlays(this)) {
-                Intent intent = new Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName())
-                );
-                startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST);
+                try {
+                    Intent intent = new Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName())
+                    );
+                    startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to request overlay permission", e);
+                }
             } else {
                 startOverlayService();
             }
@@ -45,11 +59,16 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void startOverlayService() {
-        Intent serviceIntent = new Intent(this, OverlayService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent);
-        } else {
-            startService(serviceIntent);
+        try {
+            Intent serviceIntent = new Intent(this, OverlayService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
+            serviceStarted = true;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start overlay service", e);
         }
     }
 }

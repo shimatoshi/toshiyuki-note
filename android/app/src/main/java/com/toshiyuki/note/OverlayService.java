@@ -4,11 +4,14 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -24,6 +27,7 @@ import androidx.core.app.NotificationCompat;
 
 public class OverlayService extends Service {
 
+    private static final String TAG = "OverlayService";
     private static final String CHANNEL_ID = "overlay_channel";
     private static final int NOTIFICATION_ID = 1;
 
@@ -32,8 +36,8 @@ public class OverlayService extends Service {
     private View panelView;
     private WebView webView;
     private boolean isPanelVisible = false;
+    private boolean bubbleAdded = false;
 
-    // For bubble drag
     private WindowManager.LayoutParams bubbleParams;
     private int initialX, initialY;
     private float initialTouchX, initialTouchY;
@@ -47,12 +51,31 @@ public class OverlayService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        Log.d(TAG, "onCreate");
+
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
 
+        // Check overlay permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Log.e(TAG, "No overlay permission, stopping service");
+            stopSelf();
+            return;
+        }
+
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
-        createBubble();
-        createPanel();
+
+        try {
+            createBubble();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to create bubble", e);
+            stopSelf();
+        }
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return START_STICKY;
     }
 
     private void createNotificationChannel() {
@@ -76,20 +99,23 @@ public class OverlayService extends Service {
                 .setContentText("フローティングメモ起動中")
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
                 .build();
+    }
+
+    private int getOverlayType() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
     }
 
     private void createBubble() {
         bubbleView = LayoutInflater.from(this).inflate(R.layout.overlay_bubble, null);
 
-        int overlayType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE;
-
         bubbleParams = new WindowManager.LayoutParams(
                 dpToPx(48),
                 dpToPx(48),
-                overlayType,
+                getOverlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
         );
@@ -98,96 +124,121 @@ public class OverlayService extends Service {
         bubbleParams.y = dpToPx(100);
 
         windowManager.addView(bubbleView, bubbleParams);
+        bubbleAdded = true;
 
-        bubbleView.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                switch (event.getAction()) {
-                    case MotionEvent.ACTION_DOWN:
-                        initialX = bubbleParams.x;
-                        initialY = bubbleParams.y;
-                        initialTouchX = event.getRawX();
-                        initialTouchY = event.getRawY();
-                        isDragging = false;
-                        return true;
+        bubbleView.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    initialX = bubbleParams.x;
+                    initialY = bubbleParams.y;
+                    initialTouchX = event.getRawX();
+                    initialTouchY = event.getRawY();
+                    isDragging = false;
+                    return true;
 
-                    case MotionEvent.ACTION_MOVE:
-                        int dx = (int) (event.getRawX() - initialTouchX);
-                        int dy = (int) (event.getRawY() - initialTouchY);
-                        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                            isDragging = true;
-                        }
-                        bubbleParams.x = initialX + dx;
-                        bubbleParams.y = initialY + dy;
+                case MotionEvent.ACTION_MOVE:
+                    int dx = (int) (event.getRawX() - initialTouchX);
+                    int dy = (int) (event.getRawY() - initialTouchY);
+                    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                        isDragging = true;
+                    }
+                    bubbleParams.x = initialX + dx;
+                    bubbleParams.y = initialY + dy;
+                    try {
                         windowManager.updateViewLayout(bubbleView, bubbleParams);
-                        return true;
+                    } catch (Exception e) {
+                        Log.e(TAG, "updateViewLayout error", e);
+                    }
+                    return true;
 
-                    case MotionEvent.ACTION_UP:
-                        if (!isDragging) {
-                            togglePanel();
-                        }
-                        return true;
-                }
-                return false;
+                case MotionEvent.ACTION_UP:
+                    if (!isDragging) {
+                        togglePanel();
+                    }
+                    return true;
             }
+            return false;
         });
     }
 
-    private void createPanel() {
-        panelView = LayoutInflater.from(this).inflate(R.layout.overlay_panel, null);
-        webView = panelView.findViewById(R.id.overlay_webview);
+    private void ensurePanel() {
+        if (panelView != null) return;
 
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
+        try {
+            panelView = LayoutInflater.from(this).inflate(R.layout.overlay_panel, null);
+            webView = panelView.findViewById(R.id.overlay_webview);
 
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
+            WebSettings settings = webView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        // Load the overlay HTML from assets
-        webView.loadUrl("file:///android_asset/public/overlay.html");
+            webView.setWebViewClient(new WebViewClient());
+            webView.setWebChromeClient(new WebChromeClient());
+            webView.loadUrl("file:///android_asset/public/overlay.html");
 
-        // Close button
-        ImageView closeBtn = panelView.findViewById(R.id.overlay_close_btn);
-        closeBtn.setOnClickListener(v -> togglePanel());
+            ImageView closeBtn = panelView.findViewById(R.id.overlay_close_btn);
+            closeBtn.setOnClickListener(v -> togglePanel());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to create panel", e);
+            panelView = null;
+            webView = null;
+        }
     }
 
     private void togglePanel() {
-        if (isPanelVisible) {
-            windowManager.removeView(panelView);
+        try {
+            if (isPanelVisible) {
+                windowManager.removeView(panelView);
+                isPanelVisible = false;
+            } else {
+                ensurePanel();
+                if (panelView == null) return;
+
+                DisplayMetrics metrics = getResources().getDisplayMetrics();
+                int panelHeight = metrics.heightPixels / 4;
+
+                WindowManager.LayoutParams panelParams = new WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        panelHeight,
+                        getOverlayType(),
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                        PixelFormat.TRANSLUCENT
+                );
+                panelParams.gravity = Gravity.BOTTOM;
+                panelParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+
+                windowManager.addView(panelView, panelParams);
+                isPanelVisible = true;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "togglePanel error", e);
             isPanelVisible = false;
-        } else {
-            DisplayMetrics metrics = new DisplayMetrics();
-            windowManager.getDefaultDisplay().getMetrics(metrics);
-
-            int panelHeight = metrics.heightPixels / 4;
-
-            int overlayType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                    ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                    : WindowManager.LayoutParams.TYPE_PHONE;
-
-            WindowManager.LayoutParams panelParams = new WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    panelHeight,
-                    overlayType,
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
-                    PixelFormat.TRANSLUCENT
-            );
-            panelParams.gravity = Gravity.BOTTOM;
-            panelParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
-
-            windowManager.addView(panelView, panelParams);
-            isPanelVisible = true;
         }
     }
 
     @Override
     public void onDestroy() {
+        Log.d(TAG, "onDestroy");
+        try {
+            if (isPanelVisible && panelView != null) {
+                windowManager.removeView(panelView);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error removing panel", e);
+        }
+        try {
+            if (bubbleAdded && bubbleView != null) {
+                windowManager.removeView(bubbleView);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error removing bubble", e);
+        }
+        if (webView != null) {
+            webView.destroy();
+        }
         super.onDestroy();
-        if (bubbleView != null) windowManager.removeView(bubbleView);
-        if (isPanelVisible && panelView != null) windowManager.removeView(panelView);
     }
 
     private int dpToPx(int dp) {

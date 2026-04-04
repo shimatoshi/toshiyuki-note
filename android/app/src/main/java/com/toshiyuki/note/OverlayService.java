@@ -53,6 +53,11 @@ public class OverlayService extends Service {
     private float initialTouchX, initialTouchY;
     private boolean isDragging = false;
 
+    // Panel resize
+    private WindowManager.LayoutParams panelParams;
+    private int panelDragStartY;
+    private int panelDragStartHeight;
+
     private BroadcastReceiver debugReceiver;
 
     @Override
@@ -293,10 +298,11 @@ public class OverlayService extends Service {
                 }
 
                 DisplayMetrics metrics = getResources().getDisplayMetrics();
-                int panelHeight = metrics.heightPixels / 2;
+                // Default: compact size (~4 lines of text + header/footer ≈ 280dp)
+                int panelHeight = Math.min(dpToPx(280), metrics.heightPixels / 2);
                 fileLog("Panel height: " + panelHeight + ", screen: " + metrics.heightPixels);
 
-                WindowManager.LayoutParams panelParams = new WindowManager.LayoutParams(
+                panelParams = new WindowManager.LayoutParams(
                         WindowManager.LayoutParams.MATCH_PARENT,
                         panelHeight,
                         getOverlayType(),
@@ -307,12 +313,52 @@ public class OverlayService extends Service {
 
                 windowManager.addView(panelView, panelParams);
                 isPanelVisible = true;
+
+                // Setup drag handle for resize
+                setupPanelDragHandle();
+
                 fileLog("Panel shown successfully");
             }
         } catch (Exception e) {
             fileLog("togglePanel EXCEPTION: " + e.getMessage());
             isPanelVisible = false;
         }
+    }
+
+    private void setupPanelDragHandle() {
+        View dragHandle = panelView.findViewById(R.id.overlay_drag_handle);
+        if (dragHandle == null) return;
+
+        dragHandle.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    panelDragStartY = (int) event.getRawY();
+                    panelDragStartHeight = panelParams.height;
+                    return true;
+
+                case MotionEvent.ACTION_MOVE:
+                    int dy = panelDragStartY - (int) event.getRawY();
+                    int newHeight = panelDragStartHeight + dy;
+
+                    // Clamp between min (200dp) and max (80% of screen)
+                    DisplayMetrics metrics = getResources().getDisplayMetrics();
+                    int minH = dpToPx(200);
+                    int maxH = (int) (metrics.heightPixels * 0.8);
+                    newHeight = Math.max(minH, Math.min(maxH, newHeight));
+
+                    panelParams.height = newHeight;
+                    try {
+                        windowManager.updateViewLayout(panelView, panelParams);
+                    } catch (Exception e) {
+                        fileLog("panel resize error: " + e.getMessage());
+                    }
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                    return true;
+            }
+            return false;
+        });
     }
 
     @Override

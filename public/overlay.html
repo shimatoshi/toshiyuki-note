@@ -154,6 +154,19 @@ textarea.ruled {
 <input type="file" class="hidden-input" id="fileInput" onchange="handleFile(event)">
 
 <script>
+// Global error handler — catches ALL JS errors
+window.onerror = function(msg, src, line, col, err) {
+  const log = 'JS_ERROR: ' + msg + ' at ' + src + ':' + line + ':' + col;
+  console.error(log);
+  try { document.getElementById('status').textContent = log; } catch(e) {}
+  return false;
+};
+window.addEventListener('unhandledrejection', function(e) {
+  const log = 'JS_PROMISE_ERROR: ' + (e.reason?.message || e.reason || 'unknown');
+  console.error(log);
+  try { document.getElementById('status').textContent = log; } catch(ex) {}
+});
+
 // State
 let notebooks = [];
 let currentNbId = null;
@@ -166,18 +179,25 @@ let attachments = []; // current page attachments
 
 const $ = id => document.getElementById(id);
 
+function log(msg) {
+  console.log('[overlay] ' + msg);
+}
+
 // ==========================================
 // Init
 // ==========================================
 async function init() {
   try {
+    log('init start, NotesBridge=' + (typeof NotesBridge));
     if (typeof NotesBridge === 'undefined') {
       $('status').textContent = 'error: NotesBridge not available';
       return;
     }
     await loadNotebookList();
+    log('init complete, notebooks=' + notebooks.length);
     $('status').textContent = 'ready';
   } catch (e) {
+    log('init ERROR: ' + e.message + '\n' + e.stack);
     $('status').textContent = 'error: ' + e.message;
   }
 }
@@ -186,7 +206,9 @@ async function init() {
 // Notebook management
 // ==========================================
 async function loadNotebookList() {
+  log('loadNotebookList called');
   const raw = NotesBridge.listNotebooks();
+  log('listNotebooks returned: ' + raw.substring(0, 200));
   notebooks = JSON.parse(raw);
 
   const sel = $('nbSelect');
@@ -209,8 +231,10 @@ async function loadNotebookList() {
 }
 
 async function loadNotebook(id) {
+  log('loadNotebook: ' + id);
   currentNbId = id;
   const raw = NotesBridge.getNotebookMeta(id);
+  log('meta: ' + raw.substring(0, 200));
   currentMeta = JSON.parse(raw);
   currentPage = currentMeta.currentPage || 1;
   totalPages = currentMeta.totalPages || 100;
@@ -275,6 +299,7 @@ function nextPage() {
 function saveCurrent() {
   if (!currentNbId) return;
   const content = $('editor').value;
+  log('savePage nb=' + currentNbId + ' p=' + currentPage + ' len=' + content.length);
   NotesBridge.savePage(currentNbId, currentPage, content);
 
   // Save currentPage to meta

@@ -187,6 +187,8 @@ textarea.ruled {
   <div class="footer">
     <div class="footer-left" id="status">ready</div>
     <div class="footer-right">
+      <button class="btn btn-icon" onclick="doCopy()" title="コピー">📋</button>
+      <button class="btn btn-icon" onclick="doPaste()" title="ペースト">📌</button>
       <button class="btn btn-icon" onclick="insertTimestamp()" title="時刻">🕐</button>
       <button class="btn btn-icon" onclick="pickImage()" title="画像">📷</button>
       <button class="btn btn-icon" onclick="pickFile()" title="ファイル">📎</button>
@@ -689,6 +691,50 @@ function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+// Copy/Paste for overlay (system context menu doesn't work in overlay windows)
+function doCopy() {
+  const editor = $('editor');
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  const text = start !== end ? editor.value.slice(start, end) : editor.value;
+  if (!text) { $('status').textContent = 'コピーするテキストがありません'; return; }
+  navigator.clipboard.writeText(text).then(() => {
+    $('status').textContent = start !== end ? '選択範囲をコピーしました' : '全文をコピーしました';
+  }).catch(e => {
+    // Fallback for clipboard API failure in overlay
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      $('status').textContent = start !== end ? '選択範囲をコピーしました' : '全文をコピーしました';
+    } catch(e2) {
+      $('status').textContent = 'コピー失敗: ' + e2.message;
+    }
+  });
+}
+
+async function doPaste() {
+  const editor = $('editor');
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) { $('status').textContent = 'クリップボードが空です'; return; }
+    const pos = editor.selectionStart;
+    const end = editor.selectionEnd;
+    editor.value = editor.value.slice(0, pos) + text + editor.value.slice(end);
+    editor.selectionStart = editor.selectionEnd = pos + text.length;
+    editor.focus();
+    scheduleSave();
+    $('status').textContent = 'ペーストしました';
+  } catch(e) {
+    $('status').textContent = 'ペースト失敗: クリップボード権限が必要です';
+    log('paste error: ' + e.message);
+  }
 }
 
 // ==========================================

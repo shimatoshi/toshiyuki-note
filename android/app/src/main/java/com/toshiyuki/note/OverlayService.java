@@ -232,7 +232,12 @@ public class OverlayService extends Service {
 
                 panelParams = new WindowManager.LayoutParams(
                         panelWidth, panelHeight, getOverlayType(),
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT);
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                        PixelFormat.TRANSLUCENT);
+                panelParams.softInputMode =
+                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                                | WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN;
                 panelParams.gravity = Gravity.TOP | Gravity.START;
                 panelParams.x = metrics.widthPixels - panelWidth;
                 panelParams.y = metrics.heightPixels - panelHeight;

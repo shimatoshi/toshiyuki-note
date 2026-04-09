@@ -494,7 +494,7 @@ function App() {
 
   return (
     <div className="app-container">
-      <Header 
+      <Header
         title={currentNotebook.title}
         onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
         onRename={handleRename}
@@ -565,7 +565,7 @@ function App() {
         />
       </main>
 
-      <Footer 
+      <Footer
         currentPage={currentNotebook.currentPage}
         totalPages={TOTAL_PAGES}
         onAddAttachment={handleAddAttachment}

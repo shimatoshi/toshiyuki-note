@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { TOTAL_PAGES } from '../types'
 import type { Notebook, NotebookMetadata, Page } from '../types'
@@ -33,6 +33,29 @@ export const useNotebooks = () => {
   const [notebooks, setNotebooks] = useState<NotebookMetadata[]>([])
   const [currentNotebook, setCurrentNotebook] = useState<Notebook | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  // 保存失敗の可視化: 失敗するとtrue、保留中のノートをrefに退避してリトライ可能にする
+  const [saveError, setSaveError] = useState(false)
+  const pendingSaveRef = useRef<Notebook | null>(null)
+
+  // すべての保存をこの一箇所に通す。成功/失敗でsaveErrorを更新し、
+  // 失敗時は保留ノートを保持してretrySaveで再送できるようにする。
+  const persist = useCallback(async (notebook: Notebook): Promise<void> => {
+    try {
+      await db.saveNotebook(notebook)
+      pendingSaveRef.current = null
+      setSaveError(false)
+    } catch (e) {
+      console.error('Save failed', e)
+      pendingSaveRef.current = notebook
+      setSaveError(true)
+    }
+  }, [])
+
+  const retrySave = useCallback(async () => {
+    if (pendingSaveRef.current) {
+      await persist(pendingSaveRef.current)
+    }
+  }, [persist])
 
   // Migration Logic
   const migrateFromLocalStorage = async () => {
@@ -129,7 +152,7 @@ export const useNotebooks = () => {
 
   const createNotebookInternal = async () => {
     const newNotebook = createNewNotebook()
-    await db.saveNotebook(newNotebook)
+    await persist(newNotebook)
     
     const newMeta: NotebookMetadata = {
       id: newNotebook.id,
@@ -153,9 +176,9 @@ export const useNotebooks = () => {
     if (notebook) {
       if (targetPage) {
         notebook.currentPage = targetPage
-        // Don't save this page change to DB immediately to avoid history pollution? 
+        // Don't save this page change to DB immediately to avoid history pollution?
         // Or yes, save it as "last opened page".
-        await db.saveNotebook(notebook)
+        await persist(notebook)
       }
       setCurrentNotebook(notebook)
     } else {
@@ -202,21 +225,21 @@ export const useNotebooks = () => {
         clearTimeout(existingTimer)
         delete (window as any)[timerId]
       }
-      await db.saveNotebook(notebook)
+      await persist(notebook)
     } else {
       // 入力中の場合はタイマーで遅延実行
       const existingTimer = (window as any)[timerId]
       if (existingTimer) clearTimeout(existingTimer);
 
       (window as any)[timerId] = setTimeout(async () => {
-        await db.saveNotebook(notebook)
+        await persist(notebook)
         delete (window as any)[timerId]
       }, 1000) // 1秒間入力が止まったら保存
     }
   }
 
   const importNotebook = async (notebook: Notebook) => {
-    await db.saveNotebook(notebook)
+    await persist(notebook)
 
     const newMeta: NotebookMetadata = {
       id: notebook.id,
@@ -246,6 +269,8 @@ export const useNotebooks = () => {
     notebooks,
     currentNotebook,
     isLoading,
+    saveError,
+    retrySave,
     createNotebook,
     loadNotebook,
     deleteNotebook,
@@ -254,4 +279,4 @@ export const useNotebooks = () => {
     searchNotebooks,
     getMonthlyActivity
   }
-}    
+}

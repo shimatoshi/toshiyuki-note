@@ -24,6 +24,8 @@ function App() {
     notebooks,
     currentNotebook,
     isLoading,
+    saveError,
+    retrySave,
     createNotebook,
     loadNotebook,
     deleteNotebook,
@@ -499,6 +501,13 @@ function App() {
         onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
         onRename={handleRename}
       />
+
+      {saveError && (
+        <div className="save-error-banner" role="alert">
+          <span>⚠️ 保存に失敗しました。端末の空き容量を確認してください。</span>
+          <button onClick={() => retrySave()}>再試行</button>
+        </div>
+      )}
 
       <NotebookMenu
         isOpen={isMenuOpen}

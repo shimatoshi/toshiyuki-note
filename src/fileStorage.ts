@@ -300,7 +300,10 @@ export const fileDb = {
         lastModified: now,
       })
     } catch (e) {
+      // 握り潰さず呼び出し元へ伝播させる。
+      // 楽観更新済みのUIに保存失敗を通知し、データ消失に気づけるようにするため。
       console.error('saveNotebook error', e)
+      throw e
     }
   },
 

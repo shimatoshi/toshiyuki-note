@@ -97,41 +97,31 @@ function App() {
     updateNotebook({ ...currentNotebook, title: newTitle }, true)
   }
 
-  // Action: Add Attachment
-  const handleAddAttachment = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => {
-    if (!currentNotebook || !e.target.files || e.target.files.length === 0) return
-    
-    const file = e.target.files[0]
-    const newAttachment: Attachment = {
-      id: uuidv4(),
-      type: type,
-      data: file, // Store Blob directly
-      name: file.name,
-      mimeType: file.type,
-      createdAt: new Date().toISOString()
-    }
+  // 添付を現在ページに追加し、本文のカーソル位置に参照トークン (画像N) 等を挿入する。
+  // ファイル選択・ペースト・ドロップなど複数の入口から共通利用する。
+  const insertAttachment = async (att: Attachment) => {
+    if (!currentNotebook) return
 
     const newPages = [...currentNotebook.pages]
     const pageIndex = currentNotebook.currentPage - 1
     const currentPage = newPages[pageIndex]
-    
-    const updatedAttachments = currentPage.attachments ? [...currentPage.attachments, newAttachment] : [newAttachment]
+
+    const updatedAttachments = currentPage.attachments ? [...currentPage.attachments, att] : [att]
     const attachmentNumber = updatedAttachments.length
 
-    // Insert text reference
+    const tagLabel = att.type === 'image' ? '画像' : att.type === 'location' ? '現在地' : 'ファイル'
+    const textToInsert = ` (${tagLabel}${attachmentNumber}) `
+
     let newContent = currentPage.content
     const textarea = textareaRef.current
     if (textarea) {
       const start = textarea.selectionStart
       const end = textarea.selectionEnd
-      const tagLabel = type === 'image' ? '画像' : 'ファイル'
-      const textToInsert = ` (${tagLabel}${attachmentNumber}) `
       newContent = newContent.substring(0, start) + textToInsert + newContent.substring(end)
     } else {
-       const tagLabel = type === 'image' ? '画像' : 'ファイル'
-       newContent += `\n(${tagLabel}${attachmentNumber})`
+      newContent += `\n${textToInsert}`
     }
-    
+
     newPages[pageIndex] = {
       ...currentPage,
       content: newContent,
@@ -140,6 +130,53 @@ function App() {
     }
 
     await updateNotebook({ ...currentNotebook, pages: newPages })
+  }
+
+  // Action: Add Attachment (file picker)
+  const handleAddAttachment = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') => {
+    if (!currentNotebook || !e.target.files || e.target.files.length === 0) return
+
+    const file = e.target.files[0]
+    await insertAttachment({
+      id: uuidv4(),
+      type,
+      data: file, // Store Blob directly
+      name: file.name,
+      mimeType: file.type,
+      createdAt: new Date().toISOString(),
+    })
+
+    // 同じファイルを連続で選び直せるよう input をリセット
+    e.target.value = ''
+  }
+
+  // 本文への画像ペースト対応。クリップボードに画像があれば添付として取り込み、
+  // 参照トークンを挿入する。画像が無ければ通常のテキストペーストに委ねる。
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!currentNotebook) return
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) {
+          const ext = (item.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+          await insertAttachment({
+            id: uuidv4(),
+            type: 'image',
+            data: file,
+            name: `pasted-${Date.now()}.${ext}`,
+            mimeType: item.type,
+            createdAt: new Date().toISOString(),
+          })
+        }
+        return
+      }
+    }
+    // 画像でなければ何もしない（ブラウザ既定のテキストペーストが走る）
   }
 
   const handleAddTimestamp = () => {
@@ -563,6 +600,7 @@ function App() {
           ref={textareaRef}
           value={currentPageData.content}
           onChange={(e) => handleContentChange(e.target.value)}
+          onPaste={handlePaste}
           placeholder={`Page ${currentNotebook.currentPage}`}
           spellCheck={false}
           className={currentNotebook.showLines ? 'ruled' : ''}

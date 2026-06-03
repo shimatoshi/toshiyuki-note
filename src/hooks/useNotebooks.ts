@@ -194,11 +194,17 @@ export const useNotebooks = () => {
     ))
 
     // 3. データベースへの保存
+    const timerId = `save-${notebook.id}`
     if (immediate) {
+      // 保留中の遅延保存をキャンセル（古いスナップショットでの上書きを防ぐ）
+      const existingTimer = (window as any)[timerId]
+      if (existingTimer) {
+        clearTimeout(existingTimer)
+        delete (window as any)[timerId]
+      }
       await db.saveNotebook(notebook)
     } else {
       // 入力中の場合はタイマーで遅延実行
-      const timerId = `save-${notebook.id}`
       const existingTimer = (window as any)[timerId]
       if (existingTimer) clearTimeout(existingTimer);
 

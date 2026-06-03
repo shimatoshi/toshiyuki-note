@@ -53,8 +53,8 @@ function App() {
 
   // Action: Page Change
   const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > TOTAL_PAGES) return
     if (!currentNotebook) return
+    if (newPage < 1 || newPage > currentNotebook.pages.length) return
 
     updateNotebook({ ...currentNotebook, currentPage: newPage })
     window.scrollTo(0, 0)
@@ -62,7 +62,7 @@ function App() {
 
   const handleNextPage = () => {
     if (!currentNotebook) return
-    if (currentNotebook.currentPage === TOTAL_PAGES) {
+    if (currentNotebook.currentPage >= currentNotebook.pages.length) {
       alert('最後のページです。メニューから保存して新しいノートを作成してください。')
     } else {
       handlePageChange(currentNotebook.currentPage + 1)
@@ -567,7 +567,7 @@ function App() {
 
       <Footer
         currentPage={currentNotebook.currentPage}
-        totalPages={TOTAL_PAGES}
+        totalPages={currentNotebook.pages.length}
         onAddAttachment={handleAddAttachment}
         onAddTimestamp={handleAddTimestamp}
         onAddLocation={handleAddLocation}

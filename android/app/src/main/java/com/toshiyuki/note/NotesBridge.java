@@ -107,17 +107,27 @@ public class NotesBridge {
                     while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
 
                     String base64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
-                    String escapedName = fileName != null ? fileName.replace("'", "\\'") : "file";
-                    String escapedMime = mimeType != null ? mimeType : "application/octet-stream";
 
-                    mainHandler.post(() ->
-                            webView.evaluateJavascript(callbackName + "({\"base64\":\"" + base64
-                                    + "\",\"name\":\"" + escapedName
-                                    + "\",\"mimeType\":\"" + escapedMime + "\"})", null));
+                    // Build with JSONObject so a filename containing quotes/backslashes
+                    // can't break out of the string and inject JS into the WebView.
+                    org.json.JSONObject payload = new org.json.JSONObject();
+                    payload.put("base64", base64);
+                    payload.put("name", fileName != null ? fileName : "file");
+                    payload.put("mimeType", mimeType != null ? mimeType : "application/octet-stream");
+                    String js = callbackName + "(" + payload + ")";
+                    mainHandler.post(() -> webView.evaluateJavascript(js, null));
                 } catch (Exception e) {
                     Log.e(TAG, "pickFile read error", e);
-                    mainHandler.post(() ->
-                            webView.evaluateJavascript(callbackName + "({\"error\":\"" + e.getMessage() + "\"})", null));
+                    String js;
+                    try {
+                        org.json.JSONObject err = new org.json.JSONObject();
+                        err.put("error", e.getMessage() != null ? e.getMessage() : "unknown error");
+                        js = callbackName + "(" + err + ")";
+                    } catch (org.json.JSONException ignored) {
+                        js = callbackName + "({\"error\":\"read failed\"})";
+                    }
+                    final String jsFinal = js;
+                    mainHandler.post(() -> webView.evaluateJavascript(jsFinal, null));
                 }
             }
 

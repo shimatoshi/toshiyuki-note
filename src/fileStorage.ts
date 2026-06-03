@@ -202,11 +202,34 @@ export const fileDb = {
       await ensureDir(`${ROOT}/${id}/attachments`)
 
       // Save pages in parallel (only non-empty to avoid unnecessary writes)
+      const nonEmptyPages = new Set(
+        notebook.pages.filter(p => p.content.length > 0).map(p => p.pageNumber)
+      )
       await Promise.all(
         notebook.pages
           .filter(p => p.content.length > 0)
           .map(p => writeText(pagePath(id, p.pageNumber), p.content))
       )
+
+      // Remove stale page files for pages that were cleared.
+      // Without this, deleted text lingers on disk and shows up in search/calendar.
+      try {
+        const dir = await Filesystem.readdir({ path: `${ROOT}/${id}/pages`, directory: DIR })
+        await Promise.all(
+          dir.files.map(async (entry: any) => {
+            const fileName = typeof entry === 'string' ? entry : entry.name
+            const match = /^(\d+)\.txt$/.exec(fileName)
+            if (match && !nonEmptyPages.has(parseInt(match[1], 10))) {
+              await Filesystem.deleteFile({
+                path: `${ROOT}/${id}/pages/${fileName}`,
+                directory: DIR,
+              }).catch(() => { /* already gone */ })
+            }
+          })
+        )
+      } catch {
+        // pages dir not yet created — nothing to clean
+      }
 
       // Save attachments
       const manifest: Record<string, any[]> = {}

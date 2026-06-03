@@ -1,4 +1,4 @@
-export const TOTAL_PAGES = 50
+export const TOTAL_PAGES = 100
 
 export interface Attachment {
   id: string;

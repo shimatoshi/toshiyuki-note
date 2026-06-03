@@ -216,7 +216,7 @@ export const fileDb = {
       try {
         const dir = await Filesystem.readdir({ path: `${ROOT}/${id}/pages`, directory: DIR })
         await Promise.all(
-          dir.files.map(async (entry: any) => {
+          dir.files.map(async (entry) => {
             const fileName = typeof entry === 'string' ? entry : entry.name
             const match = /^(\d+)\.txt$/.exec(fileName)
             if (match && !nonEmptyPages.has(parseInt(match[1], 10))) {

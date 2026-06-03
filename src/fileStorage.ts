@@ -49,6 +49,37 @@ async function writeText(path: string, data: string): Promise<void> {
   await Filesystem.writeFile({ path, directory: DIR, data, encoding: Encoding.UTF8, recursive: true })
 }
 
+interface PageFileInfo {
+  pageNumber: number
+  mtime?: number
+  size?: number
+}
+
+// 実在するページファイルだけを列挙する。
+// 空ページはディスクに書かれないため、1..totalPages を総当たりするより
+// 桁違いに少ないI/Oで済む（検索・カレンダーの重さの主因を解消）。
+async function listPageFiles(notebookId: string): Promise<PageFileInfo[]> {
+  try {
+    const dir = await Filesystem.readdir({ path: `${ROOT}/${notebookId}/pages`, directory: DIR })
+    const out: PageFileInfo[] = []
+    for (const entry of dir.files) {
+      const name = typeof entry === 'string' ? entry : entry.name
+      const m = /^(\d+)\.txt$/.exec(name)
+      if (!m) continue
+      const info: PageFileInfo = { pageNumber: parseInt(m[1], 10) }
+      if (typeof entry !== 'string') {
+        info.mtime = entry.mtime
+        info.size = entry.size
+      }
+      out.push(info)
+    }
+    return out
+  } catch {
+    // pages ディレクトリがまだ無い
+    return []
+  }
+}
+
 
 // ==========================================
 // Init
@@ -120,10 +151,14 @@ export const fileDb = {
       if (!metaStr) return undefined
       const meta = JSON.parse(metaStr)
 
-      // Read all pages in parallel
+      // Read only pages that actually exist on disk (empty pages are never written),
+      // then pad the rest as empty. Avoids reading totalPages(=100) files per open.
       const totalPages = meta.totalPages || TOTAL_PAGES
+      const existing = new Set((await listPageFiles(id)).map(p => p.pageNumber))
       const pageContents = await Promise.all(
-        Array.from({ length: totalPages }, (_, i) => readText(pagePath(id, i + 1)))
+        Array.from({ length: totalPages }, (_, i) =>
+          existing.has(i + 1) ? readText(pagePath(id, i + 1)) : Promise.resolve(null)
+        )
       )
       const pages: Page[] = pageContents.map((content, i) => ({
         pageNumber: i + 1,
@@ -327,14 +362,15 @@ export const fileDb = {
 
     const index = await readIndex()
     for (const meta of index) {
-      const metaStr = await readText(metaPath(meta.id))
-      if (!metaStr) continue
-      const nbMeta = JSON.parse(metaStr)
-      const totalPages = nbMeta.totalPages || TOTAL_PAGES
+      // Only existing (non-empty) pages, read in parallel.
+      const pageFiles = await listPageFiles(meta.id)
+      const contents = await Promise.all(
+        pageFiles.map(pf => readText(pagePath(meta.id, pf.pageNumber)))
+      )
 
-      for (let i = 1; i <= totalPages; i++) {
-        const content = await readText(pagePath(meta.id, i))
-        if (!content) continue
+      pageFiles.forEach((pf, idx2) => {
+        const content = contents[idx2]
+        if (!content) return
         const lowerContent = content.toLowerCase()
         if (lowerContent.includes(lowerQuery)) {
           const idx = lowerContent.indexOf(lowerQuery)
@@ -344,11 +380,11 @@ export const fileDb = {
           results.push({
             notebookId: meta.id,
             title: meta.title,
-            pageNumber: i,
+            pageNumber: pf.pageNumber,
             snippet,
           })
         }
-      }
+      })
     }
     return results
   },
@@ -360,36 +396,35 @@ export const fileDb = {
 
     const index = await readIndex()
     for (const meta of index) {
-      const metaStr = await readText(metaPath(meta.id))
-      if (!metaStr) continue
-      const nbMeta = JSON.parse(metaStr)
-      const totalPages = nbMeta.totalPages || TOTAL_PAGES
+      // Enumerate existing page files once. A page file only exists if it had
+      // content, so we can skip the per-page content read entirely.
+      const pageFiles = await listPageFiles(meta.id)
+      for (const pf of pageFiles) {
+        // size===0 only happens for empty files written by the native layer; skip them.
+        if (pf.size === 0) continue
 
-      for (let i = 1; i <= totalPages; i++) {
-        try {
-          const stat = await Filesystem.stat({
-            path: pagePath(meta.id, i),
-            directory: DIR,
-          })
-          if (stat.mtime) {
-            const d = new Date(stat.mtime)
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            if (dateStr.startsWith(prefix)) {
-              // Check if page has content
-              const content = await readText(pagePath(meta.id, i))
-              if (content && content.trim().length > 0) {
-                results.push({
-                  date: dateStr,
-                  notebookId: meta.id,
-                  title: meta.title,
-                  pageNumber: i,
-                  time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                })
-              }
-            }
+        let mtime = pf.mtime
+        if (mtime == null) {
+          // readdir didn't provide mtime — fall back to stat for this one file.
+          try {
+            const stat = await Filesystem.stat({ path: pagePath(meta.id, pf.pageNumber), directory: DIR })
+            mtime = typeof stat.mtime === 'number' ? stat.mtime : undefined
+          } catch {
+            continue
           }
-        } catch {
-          // File doesn't exist
+        }
+        if (mtime == null) continue
+
+        const d = new Date(mtime)
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        if (dateStr.startsWith(prefix)) {
+          results.push({
+            date: dateStr,
+            notebookId: meta.id,
+            title: meta.title,
+            pageNumber: pf.pageNumber,
+            time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          })
         }
       }
     }

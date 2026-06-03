@@ -15,7 +15,7 @@ export default defineConfig({
         clientsClaim: true,
         sourcemap: false,
       },
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['apple-touch-icon.webp', 'icon.webp'],
       manifest: {
         name: 'としゆきノート',
         short_name: 'としゆきNote',
@@ -28,19 +28,19 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'pwa-192x192.webp',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/webp'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'pwa-512x512.webp',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/webp'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'pwa-512x512.webp',
             sizes: '512x512',
-            type: 'image/png',
+            type: 'image/webp',
             purpose: 'any maskable'
           }
         ]

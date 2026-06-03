@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Typecheck & Build (PWA)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # tsc -b && vite build。型エラー or ビルド失敗で CI を落とす。
+      - name: Build
+        run: npm run build
+
+      # lint は既存の指摘が残っているため参考表示（CI は落とさない）。
+      - name: Lint (non-blocking)
+        run: npm run lint
+        continue-on-error: true

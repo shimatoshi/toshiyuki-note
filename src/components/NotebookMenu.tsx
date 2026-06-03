@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { FileText, Trash2, Download, Upload, PlusCircle, Image as ImageIcon, Type, LogIn, LogOut, Cloud } from 'lucide-react'
+import { FileText, Trash2, Download, Upload, PlusCircle, Image as ImageIcon, Type, LogIn, LogOut, Cloud, FileCode, Archive } from 'lucide-react'
 import type { NotebookMetadata, Notebook } from '../types'
 
 interface SyncInfo {
@@ -20,6 +20,8 @@ interface NotebookMenuProps {
   onCreateNotebook: () => void
   onDownloadZip: () => void
   onImportZip: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onExportHtml: () => void
+  onExportAllHtml: () => void
   onUpdateNotebook: (notebook: Notebook, immediate?: boolean) => void
   sync?: SyncInfo
 }
@@ -34,6 +36,8 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
   onCreateNotebook,
   onDownloadZip,
   onImportZip,
+  onExportHtml,
+  onExportAllHtml,
   onUpdateNotebook,
   sync
 }) => {
@@ -115,12 +119,20 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
             </button>
           )}
 
-          <button onClick={onDownloadZip} className="action-btn">
-            <Download size={20} /> ZIPで保存
+          <button onClick={onExportHtml} className="action-btn">
+            <FileCode size={20} /> HTMLで保存（このノート）
+          </button>
+
+          <button onClick={onExportAllHtml} className="action-btn">
+            <Archive size={20} /> 全ノートをHTMLでバックアップ
           </button>
 
           <button onClick={() => importInputRef.current?.click()} className="action-btn">
-            <Upload size={20} /> ZIPからインポート
+            <Upload size={20} /> HTML / ZIPから復元
+          </button>
+
+          <button onClick={onDownloadZip} className="action-btn">
+            <Download size={20} /> ZIPで保存（旧形式）
           </button>
 
           <input
@@ -137,7 +149,7 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
               onImportZip(e)
               if (importInputRef.current) importInputRef.current.value = ''
             }}
-            accept=".zip"
+            accept=".html,.htm,.zip"
             style={{ display: 'none' }}
           />
         </div>
@@ -197,7 +209,7 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
         )}
 
         <div className="menu-footer">
-          <p>Toshiyuki Note v1.3.2</p>
+          <p>Toshiyuki Note v2.0.0</p>
           <button 
             onClick={() => {
               if (window.confirm('キャッシュをクリアしてアプリを再起動しますか？')) {

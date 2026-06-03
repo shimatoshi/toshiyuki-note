@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { useNotebooks } from './hooks/useNotebooks'
 import { useSync } from './hooks/useSync'
 import { reverseGeocode, formatAddress } from './utils/geocoding'
+import { notebookToHtml, htmlToNotebook } from './utils/notebookHtml'
 import { TOTAL_PAGES } from './types'
 import type { Attachment, Page, Notebook } from './types'
 import './styles/global.css'
@@ -32,6 +33,7 @@ function App() {
     updateNotebook,
     importNotebook,
     searchNotebooks,
+    getNotebookRaw,
     getMonthlyActivity
   } = useNotebooks()
 
@@ -384,92 +386,146 @@ function App() {
     setIsMenuOpen(false)
   }
 
-  // Action: Import ZIP
+  // Action: Export current notebook as a single self-contained HTML
+  const handleExportHtml = async () => {
+    if (!currentNotebook) return
+    const html = await notebookToHtml(currentNotebook)
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    saveAs(blob, `${currentNotebook.title}.html`)
+    setIsMenuOpen(false)
+  }
+
+  // Action: Export ALL notebooks as a zip of HTML files
+  const handleExportAllHtml = async () => {
+    const zip = new JSZip()
+    let count = 0
+    const usedNames = new Set<string>()
+
+    for (const meta of notebooks) {
+      const nb = await getNotebookRaw(meta.id)
+      if (!nb) continue
+      // 同名ノートのファイル名衝突を避ける
+      let name = `${nb.title || 'note'}.html`
+      let n = 2
+      while (usedNames.has(name)) {
+        name = `${nb.title || 'note'} (${n}).html`
+        n++
+      }
+      usedNames.add(name)
+      zip.file(name, await notebookToHtml(nb))
+      count++
+    }
+
+    if (count === 0) {
+      alert('バックアップ対象のノートがありません。')
+      return
+    }
+
+    const content = await zip.generateAsync({ type: 'blob' })
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    saveAs(content, `toshiyuki-note-backup-${stamp}.zip`)
+    setIsMenuOpen(false)
+  }
+
+  // 旧ZIP形式(notebook.json + attachments/)を復元
+  const buildNotebookFromLegacyZip = async (zip: JSZip, fallbackTitle: string): Promise<Notebook | null> => {
+    const manifestFile = zip.file('notebook.json')
+    if (!manifestFile) return null
+
+    const manifest = JSON.parse(await manifestFile.async('string'))
+    const now = new Date().toISOString()
+    const newPages: Page[] = []
+
+    for (const pageDef of manifest.pages) {
+      const attachments: Attachment[] = []
+      if (pageDef.attachments) {
+        for (const attDef of pageDef.attachments) {
+          if (attDef.type === 'location') {
+            attachments.push({ id: uuidv4(), type: 'location', data: attDef.data, name: attDef.name, createdAt: attDef.createdAt || now })
+          } else if (attDef.filePath) {
+            const zipEntry = zip.file(attDef.filePath)
+            if (zipEntry) {
+              const blob = await zipEntry.async('blob')
+              attachments.push({ id: uuidv4(), type: attDef.type, data: blob, name: attDef.name, mimeType: attDef.mimeType, createdAt: attDef.createdAt || now })
+            }
+          }
+        }
+      }
+      newPages.push({
+        pageNumber: pageDef.pageNumber,
+        content: pageDef.content || '',
+        lastModified: pageDef.lastModified || now,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      })
+    }
+
+    while (newPages.length < TOTAL_PAGES) {
+      newPages.push({ pageNumber: newPages.length + 1, content: '', lastModified: now })
+    }
+
+    return {
+      id: uuidv4(),
+      title: manifest.title || fallbackTitle,
+      createdAt: manifest.createdAt || now,
+      currentPage: 1,
+      pages: newPages,
+      backgroundUri: manifest.backgroundUri,
+      showLines: manifest.showLines,
+    }
+  }
+
+  // Action: Import / Restore — .html(単体) / .zip(HTML束 or 旧形式) を判別して取り込む
   const handleImportZip = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return
     const file = e.target.files[0]
 
     try {
-      const zip = await JSZip.loadAsync(file)
-      const manifestFile = zip.file('notebook.json')
-
-      if (!manifestFile) {
-        alert('このZIPにはnotebook.jsonが含まれていません。\nToshiyuki Noteからエクスポートしたファイルを使用してください。')
+      // 1) HTML 単体
+      if (/\.html?$/i.test(file.name)) {
+        const nb = htmlToNotebook(await file.text())
+        if (!nb) {
+          alert('このHTMLには復元データ(tn-data)が含まれていません。')
+          return
+        }
+        await importNotebook(nb)
+        setIsMenuOpen(false)
+        alert(`「${nb.title}」を復元しました。`)
         return
       }
 
-      const manifestStr = await manifestFile.async('string')
-      const manifest = JSON.parse(manifestStr)
+      // 2) ZIP
+      const zip = await JSZip.loadAsync(file)
+      const htmlEntries = Object.keys(zip.files).filter(n => /\.html?$/i.test(n) && !zip.files[n].dir)
 
-      // 新しいNotebookを構築
-      const now = new Date().toISOString()
-      const newPages: Page[] = []
-
-      for (const pageDef of manifest.pages) {
-        const attachments: Attachment[] = []
-
-        if (pageDef.attachments) {
-          for (const attDef of pageDef.attachments) {
-            if (attDef.type === 'location') {
-              // locationは元データをそのまま復元
-              attachments.push({
-                id: uuidv4(),
-                type: 'location',
-                data: attDef.data,
-                name: attDef.name,
-                createdAt: attDef.createdAt || now,
-              })
-            } else if (attDef.filePath) {
-              // ファイル/画像はZIPから読み込み
-              const zipEntry = zip.file(attDef.filePath)
-              if (zipEntry) {
-                const blob = await zipEntry.async('blob')
-                attachments.push({
-                  id: uuidv4(),
-                  type: attDef.type,
-                  data: blob,
-                  name: attDef.name,
-                  mimeType: attDef.mimeType,
-                  createdAt: attDef.createdAt || now,
-                })
-              }
-            }
-          }
+      if (htmlEntries.length > 0) {
+        // HTML束（全ノートバックアップ）
+        let imported = 0
+        for (const name of htmlEntries) {
+          const html = await zip.files[name].async('string')
+          const nb = htmlToNotebook(html)
+          if (nb) { await importNotebook(nb); imported++ }
         }
-
-        newPages.push({
-          pageNumber: pageDef.pageNumber,
-          content: pageDef.content || '',
-          lastModified: pageDef.lastModified || now,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        })
+        if (imported === 0) {
+          alert('ZIP内に復元可能なHTMLが見つかりませんでした。')
+          return
+        }
+        setIsMenuOpen(false)
+        alert(`${imported}冊のノートを復元しました。`)
+        return
       }
 
-      // 足りないページを補完（50ページに満たない場合）
-      while (newPages.length < TOTAL_PAGES) {
-        newPages.push({
-          pageNumber: newPages.length + 1,
-          content: '',
-          lastModified: now,
-        })
+      // 3) 旧ZIP形式 (notebook.json)
+      const legacy = await buildNotebookFromLegacyZip(zip, file.name.replace(/\.zip$/i, ''))
+      if (!legacy) {
+        alert('対応する形式ではありません。\nとしゆきノートから書き出したHTML/ZIPを使用してください。')
+        return
       }
-
-      const importedNotebook: Notebook = {
-        id: uuidv4(),
-        title: manifest.title || file.name.replace(/\.zip$/i, ''),
-        createdAt: manifest.createdAt || now,
-        currentPage: 1,
-        pages: newPages,
-        backgroundUri: manifest.backgroundUri,
-        showLines: manifest.showLines,
-      }
-
-      await importNotebook(importedNotebook)
+      await importNotebook(legacy)
       setIsMenuOpen(false)
-      alert(`「${importedNotebook.title}」をインポートしました。`)
+      alert(`「${legacy.title}」をインポートしました。`)
     } catch (err) {
       console.error('Import failed:', err)
-      alert('ZIPの読み込みに失敗しました。ファイルが破損している可能性があります。')
+      alert('ファイルの読み込みに失敗しました。破損している可能性があります。')
     }
   }
 
@@ -556,6 +612,8 @@ function App() {
         onCreateNotebook={handleCreateNotebook}
         onDownloadZip={handleDownloadZip}
         onImportZip={handleImportZip}
+        onExportHtml={handleExportHtml}
+        onExportAllHtml={handleExportAllHtml}
         onUpdateNotebook={updateNotebook}
         sync={{
           isConnected,

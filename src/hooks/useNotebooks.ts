@@ -256,6 +256,9 @@ export const useNotebooks = () => {
     return await db.searchAllNotebooks(query)
   }
 
+  // currentNotebook を変えずに実体を取得する（全冊エクスポート等で使用）
+  const getNotebookRaw = useCallback(async (id: string) => db.getNotebook(id), [])
+
   const getMonthlyActivity = useCallback(async (year: number, month: number) => {
     try {
       return await db.getCalendarIndex(year, month)
@@ -277,6 +280,7 @@ export const useNotebooks = () => {
     updateNotebook,
     importNotebook,
     searchNotebooks,
+    getNotebookRaw,
     getMonthlyActivity
   }
 }

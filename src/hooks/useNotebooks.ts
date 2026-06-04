@@ -29,6 +29,47 @@ const createNewNotebook = (title = '新しいノート'): Notebook => {
   }
 }
 
+// Migration Logic（hook stateに依存しないためモジュールスコープ）
+const migrateFromLocalStorage = async () => {
+  console.log('Checking for legacy data...')
+
+  // 1. Check for v1.1 multiple notebooks metadata
+  const legacyMetaStr = localStorage.getItem(LEGACY_METADATA_KEY)
+  if (legacyMetaStr) {
+    try {
+      const metas: NotebookMetadata[] = JSON.parse(legacyMetaStr)
+      for (const meta of metas) {
+        const notebookStr = localStorage.getItem(`${LEGACY_NOTEBOOK_PREFIX}${meta.id}`)
+        if (notebookStr) {
+          const notebook: Notebook = JSON.parse(notebookStr)
+          await db.saveNotebook(notebook)
+          localStorage.removeItem(`${LEGACY_NOTEBOOK_PREFIX}${meta.id}`)
+        }
+      }
+      localStorage.removeItem(LEGACY_METADATA_KEY)
+      console.log('Migrated multiple notebooks to IndexedDB')
+    } catch (e) {
+      console.error('Migration failed (multiple)', e)
+    }
+  }
+
+  // 2. Check for v1.0 single notebook
+  const legacySingleStr = localStorage.getItem(LEGACY_SINGLE_NOTE_KEY)
+  if (legacySingleStr) {
+    try {
+      const notebook: Notebook = JSON.parse(legacySingleStr)
+      // Ensure it has an ID
+      if (!notebook.id) notebook.id = uuidv4()
+
+      await db.saveNotebook(notebook)
+      localStorage.removeItem(LEGACY_SINGLE_NOTE_KEY)
+      console.log('Migrated single notebook to IndexedDB')
+    } catch (e) {
+      console.error('Migration failed (single)', e)
+    }
+  }
+}
+
 export const useNotebooks = () => {
   const [notebooks, setNotebooks] = useState<NotebookMetadata[]>([])
   const [currentNotebook, setCurrentNotebook] = useState<Notebook | null>(null)
@@ -36,6 +77,8 @@ export const useNotebooks = () => {
   // 保存失敗の可視化: 失敗するとtrue、保留中のノートをrefに退避してリトライ可能にする
   const [saveError, setSaveError] = useState(false)
   const pendingSaveRef = useRef<Notebook | null>(null)
+  // ノートIDごとの遅延保存タイマー
+  const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   // すべての保存をこの一箇所に通す。成功/失敗でsaveErrorを更新し、
   // 失敗時は保留ノートを保持してretrySaveで再送できるようにする。
@@ -57,46 +100,21 @@ export const useNotebooks = () => {
     }
   }, [persist])
 
-  // Migration Logic
-  const migrateFromLocalStorage = async () => {
-    console.log('Checking for legacy data...')
-    
-    // 1. Check for v1.1 multiple notebooks metadata
-    const legacyMetaStr = localStorage.getItem(LEGACY_METADATA_KEY)
-    if (legacyMetaStr) {
-      try {
-        const metas: NotebookMetadata[] = JSON.parse(legacyMetaStr)
-        for (const meta of metas) {
-          const notebookStr = localStorage.getItem(`${LEGACY_NOTEBOOK_PREFIX}${meta.id}`)
-          if (notebookStr) {
-            const notebook: Notebook = JSON.parse(notebookStr)
-            await db.saveNotebook(notebook)
-            localStorage.removeItem(`${LEGACY_NOTEBOOK_PREFIX}${meta.id}`)
-          }
-        }
-        localStorage.removeItem(LEGACY_METADATA_KEY)
-        console.log('Migrated multiple notebooks to IndexedDB')
-      } catch (e) {
-        console.error('Migration failed (multiple)', e)
-      }
+  const createNotebookInternal = useCallback(async () => {
+    const newNotebook = createNewNotebook()
+    await persist(newNotebook)
+
+    const newMeta: NotebookMetadata = {
+      id: newNotebook.id,
+      title: newNotebook.title,
+      createdAt: newNotebook.createdAt,
+      lastModified: newNotebook.createdAt
     }
 
-    // 2. Check for v1.0 single notebook
-    const legacySingleStr = localStorage.getItem(LEGACY_SINGLE_NOTE_KEY)
-    if (legacySingleStr) {
-      try {
-        const notebook: Notebook = JSON.parse(legacySingleStr)
-        // Ensure it has an ID
-        if (!notebook.id) notebook.id = uuidv4()
-        
-        await db.saveNotebook(notebook)
-        localStorage.removeItem(LEGACY_SINGLE_NOTE_KEY)
-        console.log('Migrated single notebook to IndexedDB')
-      } catch (e) {
-        console.error('Migration failed (single)', e)
-      }
-    }
-  }
+    setNotebooks(prev => [newMeta, ...prev])
+    setCurrentNotebook(newNotebook)
+    return newNotebook
+  }, [persist])
 
   // Initialize
   useEffect(() => {
@@ -148,23 +166,7 @@ export const useNotebooks = () => {
     }
 
     init()
-  }, [])
-
-  const createNotebookInternal = async () => {
-    const newNotebook = createNewNotebook()
-    await persist(newNotebook)
-    
-    const newMeta: NotebookMetadata = {
-      id: newNotebook.id,
-      title: newNotebook.title,
-      createdAt: newNotebook.createdAt,
-      lastModified: newNotebook.createdAt
-    }
-    
-    setNotebooks(prev => [newMeta, ...prev])
-    setCurrentNotebook(newNotebook)
-    return newNotebook
-  }
+  }, [createNotebookInternal])
 
   // Public Actions
   const createNotebook = async () => {
@@ -217,24 +219,24 @@ export const useNotebooks = () => {
     ))
 
     // 3. データベースへの保存
-    const timerId = `save-${notebook.id}`
+    const timers = saveTimersRef.current
     if (immediate) {
       // 保留中の遅延保存をキャンセル（古いスナップショットでの上書きを防ぐ）
-      const existingTimer = (window as any)[timerId]
+      const existingTimer = timers.get(notebook.id)
       if (existingTimer) {
         clearTimeout(existingTimer)
-        delete (window as any)[timerId]
+        timers.delete(notebook.id)
       }
       await persist(notebook)
     } else {
       // 入力中の場合はタイマーで遅延実行
-      const existingTimer = (window as any)[timerId]
-      if (existingTimer) clearTimeout(existingTimer);
+      const existingTimer = timers.get(notebook.id)
+      if (existingTimer) clearTimeout(existingTimer)
 
-      (window as any)[timerId] = setTimeout(async () => {
+      timers.set(notebook.id, setTimeout(async () => {
         await persist(notebook)
-        delete (window as any)[timerId]
-      }, 1000) // 1秒間入力が止まったら保存
+        timers.delete(notebook.id)
+      }, 1000)) // 1秒間入力が止まったら保存
     }
   }
 

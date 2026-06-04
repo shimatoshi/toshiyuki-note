@@ -8,12 +8,10 @@ interface AttachmentListProps {
 }
 
 export const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, onPreview }) => {
-  if (!attachments || attachments.length === 0) return null
-
   // ObjectURLをまとめて生成し、アンマウント時にrevokeする
   const imageUrls = useMemo(() => {
     const urls: Record<string, string> = {}
-    attachments.forEach(att => {
+    attachments?.forEach(att => {
       if (att.type === 'image' && att.data instanceof Blob) {
         urls[att.id] = URL.createObjectURL(att.data)
       }
@@ -26,6 +24,8 @@ export const AttachmentList: React.FC<AttachmentListProps> = ({ attachments, onP
       Object.values(imageUrls).forEach(url => URL.revokeObjectURL(url))
     }
   }, [imageUrls])
+
+  if (!attachments || attachments.length === 0) return null
 
   return (
     <div className="attachments-area">

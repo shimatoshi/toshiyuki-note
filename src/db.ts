@@ -116,7 +116,7 @@ export const db = {
       return all.sort((a, b) => {
         try {
           return new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
-        } catch (e) {
+        } catch {
           return 0
         }
       })

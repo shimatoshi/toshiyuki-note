@@ -27,12 +27,16 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
   
   const [monthlyActivity, setMonthlyActivity] = useState<Record<string, boolean>>({})
   const [dailyDetails, setDailyDetails] = useState<Record<string, ActivityItem[]>>({})
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // 読み込み完了した月のキーと結果。isLoading/errorはここから導出する
+  const [loaded, setLoaded] = useState<{ key: string; error: string | null } | null>(null)
 
   // Calendar Logic
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
+
+  const monthKey = `${year}-${month + 1}`
+  const isLoading = loaded?.key !== monthKey
+  const error = loaded?.key === monthKey ? loaded.error : null
 
   const firstDayOfMonth = new Date(year, month, 1)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -50,15 +54,15 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
     if (!isOpen) return
 
     let isMounted = true
-    setIsLoading(true)
-    setError(null)
-    
+    const key = `${year}-${month + 1}`
+
     fetchMonthlyData(year, month + 1)
       .then(items => {
         if (!isMounted) return
         if (!Array.isArray(items)) {
             setMonthlyActivity({})
             setDailyDetails({})
+            setLoaded({ key, error: null })
             return
         }
 
@@ -74,13 +78,12 @@ export const CalendarOverlay: React.FC<CalendarOverlayProps> = ({
         
         setMonthlyActivity(newActivity)
         setDailyDetails(newDetails)
-        setIsLoading(false)
+        setLoaded({ key, error: null })
       })
       .catch(err => {
         if (!isMounted) return
         console.error('Calendar Fetch Error:', err)
-        setError('データの読み込みに失敗しました')
-        setIsLoading(false)
+        setLoaded({ key, error: 'データの読み込みに失敗しました' })
       })
 
     return () => { isMounted = false }

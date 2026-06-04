@@ -14,6 +14,28 @@ export function useSync() {
   const [defaultCalendarId, setDefaultCalendarId] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
+  const loadProfile = useCallback(async (userId: string) => {
+    if (!supabase) return
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+    if (data) {
+      setProfile(data)
+      // デフォルトのカレンダーを取得（個人カレンダーの最初のもの）
+      const { data: calendars } = await supabase
+        .from('calendars')
+        .select('id')
+        .eq('owner_id', userId)
+        .limit(1)
+      if (calendars && calendars.length > 0) {
+        setDefaultCalendarId(calendars[0].id)
+      }
+      setIsConnected(true)
+    }
+  }, [])
+
   useEffect(() => {
     if (!supabase) return
     const sb = supabase
@@ -39,29 +61,7 @@ export function useSync() {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
-
-  const loadProfile = async (userId: string) => {
-    if (!supabase) return
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (data) {
-      setProfile(data)
-      // デフォルトのカレンダーを取得（個人カレンダーの最初のもの）
-      const { data: calendars } = await supabase
-        .from('calendars')
-        .select('id')
-        .eq('owner_id', userId)
-        .limit(1)
-      if (calendars && calendars.length > 0) {
-        setDefaultCalendarId(calendars[0].id)
-      }
-      setIsConnected(true)
-    }
-  }
+  }, [loadProfile])
 
   const handleLogin = useCallback(async (email: string, password: string): Promise<string | null> => {
     if (!supabase) return 'Supabaseが設定されていません'

@@ -48,7 +48,7 @@ export const formatAddress = (info: AddressInfo): string => {
   const local = address.suburb || address.city_district || address.neighbourhood || ''
   
   // Basic filtering to avoid too much duplication if API returns redundant data, though Nominatim is usually okay.
-  let result = `${region}${city}${local}`
+  const result = `${region}${city}${local}`
   
   // If local part is empty, maybe append road if available to give some context, but user asked for "字" (aza) level.
   // suburb/city_district usually maps to "字" or "Chome".

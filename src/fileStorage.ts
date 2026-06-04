@@ -2,6 +2,16 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Capacitor } from '@capacitor/core'
 import type { Notebook, NotebookMetadata, Page, Attachment } from './types'
 
+// manifest.json に保存する添付ファイルのエントリ（data本体は別ファイル）
+interface ManifestEntry {
+  id: string
+  type: Attachment['type']
+  name?: string
+  mimeType?: string
+  createdAt: string
+  ext?: string
+}
+
 const ROOT = 'ToshiyukiNote'
 const TOTAL_PAGES = 100
 
@@ -176,7 +186,7 @@ export const fileDb = {
         const page = pages.find(p => p.pageNumber === pageNum)
         if (page && Array.isArray(atts)) {
           page.attachments = await Promise.all(
-            (atts as any[]).map(async (att: any) => {
+            (atts as ManifestEntry[]).map(async (att) => {
               const attachment: Attachment = {
                 id: att.id,
                 type: att.type,
@@ -196,7 +206,7 @@ export const fileDb = {
                     path: `${ROOT}/${id}/attachments/${att.id}${att.ext}`,
                     directory: DIR,
                   })
-                  const mimeType = att.mimeType || guessMime(att.ext)
+                  const mimeType = att.mimeType || guessMime(att.ext ?? '')
                   const base64 = result.data as string
                   const dataUrl = `data:${mimeType};base64,${base64}`
                   // Convert to Blob for compatibility with existing UI
@@ -267,12 +277,12 @@ export const fileDb = {
       }
 
       // Save attachments
-      const manifest: Record<string, any[]> = {}
+      const manifest: Record<string, ManifestEntry[]> = {}
       for (const page of notebook.pages) {
         if (page.attachments && page.attachments.length > 0) {
-          const pageAtts: any[] = []
+          const pageAtts: ManifestEntry[] = []
           for (const att of page.attachments) {
-            const attEntry: any = {
+            const attEntry: ManifestEntry = {
               id: att.id,
               type: att.type,
               name: att.name,

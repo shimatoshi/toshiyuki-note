@@ -28,7 +28,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ attachment, onClose,
     if (attachment.type === 'image' && imageUrl) {
       return <img src={imageUrl} alt="Preview" />
     } else if (attachment.type === 'location') {
-      const { latitude, longitude } = attachment.data as any
+      const { latitude, longitude } = attachment.data as { latitude: number; longitude: number }
       const mapUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
       return (
         <div style={{ color: '#fff', textAlign: 'center', padding: '0 20px' }}>

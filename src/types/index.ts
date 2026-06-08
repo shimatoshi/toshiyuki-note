@@ -7,6 +7,8 @@ export interface Attachment {
   name?: string; // filename
   mimeType?: string;
   createdAt: string;
+  ext?: string;       // 遅延読み込み用の拡張子（disk上のファイル名復元に使う）
+  loaded?: boolean;   // false=Blob実体は未デコード（現在ページ以外の遅延スタブ）
 }
 
 export interface Page {

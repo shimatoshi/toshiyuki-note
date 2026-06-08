@@ -34,6 +34,7 @@ function App() {
     importNotebook,
     searchNotebooks,
     getNotebookRaw,
+    hydrateNotebook,
     getMonthlyActivity
   } = useNotebooks()
 
@@ -314,13 +315,16 @@ function App() {
   const handleDownloadZip = async () => {
     if (!currentNotebook) return
 
+    // 遅延読み込みの添付を含め全ページの実体を確保してからZIP化する
+    const nb = await hydrateNotebook(currentNotebook)
+
     const zip = new JSZip()
     let hasContent = false
 
     // マニフェスト用: 添付ファイルのパスマッピング
     const attachmentFiles: Record<string, string> = {} // attachmentId -> zipPath
 
-    currentNotebook.pages.forEach((page) => {
+    nb.pages.forEach((page) => {
       // Text content
       if (page.content.trim()) {
         const date = new Date(page.lastModified)
@@ -359,11 +363,11 @@ function App() {
     // マニフェスト: ノート構造を保存（Blobは除外、パス参照に置換）
     const manifest = {
       version: 1,
-      title: currentNotebook.title,
-      createdAt: currentNotebook.createdAt,
-      backgroundUri: currentNotebook.backgroundUri,
-      showLines: currentNotebook.showLines,
-      pages: currentNotebook.pages.map(page => ({
+      title: nb.title,
+      createdAt: nb.createdAt,
+      backgroundUri: nb.backgroundUri,
+      showLines: nb.showLines,
+      pages: nb.pages.map(page => ({
         pageNumber: page.pageNumber,
         content: page.content,
         lastModified: page.lastModified,
@@ -382,16 +386,17 @@ function App() {
     zip.file('notebook.json', JSON.stringify(manifest, null, 2))
 
     const content = await zip.generateAsync({ type: 'blob' })
-    saveAs(content, `${currentNotebook.title}.zip`)
+    saveAs(content, `${nb.title}.zip`)
     setIsMenuOpen(false)
   }
 
   // Action: Export current notebook as a single self-contained HTML
   const handleExportHtml = async () => {
     if (!currentNotebook) return
-    const html = await notebookToHtml(currentNotebook)
+    const nb = await hydrateNotebook(currentNotebook)
+    const html = await notebookToHtml(nb)
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-    saveAs(blob, `${currentNotebook.title}.html`)
+    saveAs(blob, `${nb.title}.html`)
     setIsMenuOpen(false)
   }
 

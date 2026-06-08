@@ -139,6 +139,44 @@ async function removeFromIndex(id: string): Promise<void> {
 }
 
 // ==========================================
+// Attachment decode (lazy)
+// ==========================================
+
+// manifestエントリ1件をディスクから読み出して実体（Blob/JSON）に復元する。
+// 現在ページや、ページ切替後のオンデマンド読み込みで使う。
+async function decodeAttachment(notebookId: string, att: ManifestEntry): Promise<Attachment> {
+  const attachment: Attachment = {
+    id: att.id,
+    type: att.type,
+    name: att.name,
+    mimeType: att.mimeType,
+    createdAt: att.createdAt,
+    ext: att.ext,
+    data: '',
+    loaded: true,
+  }
+
+  if (att.type === 'location') {
+    const locStr = await readText(`${ROOT}/${notebookId}/attachments/${att.id}.json`)
+    attachment.data = locStr ? JSON.parse(locStr) : {}
+  } else {
+    // Read binary as base64 → Blob
+    try {
+      const result = await Filesystem.readFile({
+        path: `${ROOT}/${notebookId}/attachments/${att.id}${att.ext}`,
+        directory: DIR,
+      })
+      const mimeType = att.mimeType || guessMime(att.ext ?? '')
+      const dataUrl = `data:${mimeType};base64,${result.data as string}`
+      attachment.data = dataUrlToBlob(dataUrl)
+    } catch {
+      attachment.data = new Blob()
+    }
+  }
+  return attachment
+}
+
+// ==========================================
 // Notebook CRUD
 // ==========================================
 
@@ -176,46 +214,37 @@ export const fileDb = {
         lastModified: meta.lastModified || meta.createdAt,
       }))
 
-      // Read attachments
+      // Read attachments (lazy):
+      // 起動を速くするため、Blob実体は「現在ページ」と軽量なlocationだけ即デコード。
+      // それ以外のページの画像/ファイルはメタ情報＋extのスタブにとどめ、
+      // ページ切替時に loadPageAttachments() でオンデマンド復元する。
       const manifestStr = await readText(manifestPath(id))
       const manifest = manifestStr ? JSON.parse(manifestStr) : {}
+      const currentPage = meta.currentPage || 1
 
       // Attach attachments to pages
       for (const [pageKey, atts] of Object.entries(manifest)) {
         const pageNum = parseInt(pageKey)
         const page = pages.find(p => p.pageNumber === pageNum)
         if (page && Array.isArray(atts)) {
+          const eager = pageNum === currentPage
           page.attachments = await Promise.all(
-            (atts as ManifestEntry[]).map(async (att) => {
-              const attachment: Attachment = {
+            (atts as ManifestEntry[]).map((att) => {
+              // location は小さいので常に即デコード。
+              if (eager || att.type === 'location') {
+                return decodeAttachment(id, att)
+              }
+              // 遅延スタブ: 実体は読まず、復元に必要なメタだけ保持。
+              return Promise.resolve<Attachment>({
                 id: att.id,
                 type: att.type,
                 name: att.name,
                 mimeType: att.mimeType,
                 createdAt: att.createdAt,
+                ext: att.ext,
                 data: '',
-              }
-
-              if (att.type === 'location') {
-                const locStr = await readText(`${ROOT}/${id}/attachments/${att.id}.json`)
-                attachment.data = locStr ? JSON.parse(locStr) : {}
-              } else {
-                // Read binary as base64 data URL
-                try {
-                  const result = await Filesystem.readFile({
-                    path: `${ROOT}/${id}/attachments/${att.id}${att.ext}`,
-                    directory: DIR,
-                  })
-                  const mimeType = att.mimeType || guessMime(att.ext ?? '')
-                  const base64 = result.data as string
-                  const dataUrl = `data:${mimeType};base64,${base64}`
-                  // Convert to Blob for compatibility with existing UI
-                  attachment.data = dataUrlToBlob(dataUrl)
-                } catch {
-                  attachment.data = new Blob()
-                }
-              }
-              return attachment
+                loaded: false,
+              })
             })
           )
         }
@@ -234,6 +263,37 @@ export const fileDb = {
       console.error('getNotebook error', e)
       return undefined
     }
+  },
+
+  // 遅延スタブ（loaded:false）を含む添付配列を実体化して返す。
+  // 既に読み込み済み(loaded!==false)のものはそのまま返す。
+  async loadPageAttachments(notebookId: string, attachments: Attachment[]): Promise<Attachment[]> {
+    return Promise.all(
+      attachments.map((att) =>
+        att.loaded === false
+          ? decodeAttachment(notebookId, {
+              id: att.id,
+              type: att.type,
+              name: att.name,
+              mimeType: att.mimeType,
+              createdAt: att.createdAt,
+              ext: att.ext,
+            })
+          : Promise.resolve(att)
+      )
+    )
+  },
+
+  // ノート全体の遅延スタブを実体化する。エクスポート(ZIP/HTML)など
+  // 全ページの添付実体が必要な処理の前に通すこと。
+  async hydrateNotebook(notebook: Notebook): Promise<Notebook> {
+    const pages = await Promise.all(
+      notebook.pages.map(async (p) => {
+        if (!p.attachments?.some(a => a.loaded === false)) return p
+        return { ...p, attachments: await fileDb.loadPageAttachments(notebook.id, p.attachments) }
+      })
+    )
+    return { ...notebook, pages }
   },
 
   async saveNotebook(notebook: Notebook): Promise<void> {
@@ -288,6 +348,14 @@ export const fileDb = {
               name: att.name,
               mimeType: att.mimeType,
               createdAt: att.createdAt,
+            }
+
+            // 遅延未読み込みのスタブは実体を触らず、既存ファイルとmanifestを維持する。
+            // （data='' で上書き処理に入るとextが欠落しファイルが孤児化するのを防ぐ）
+            if (att.loaded === false) {
+              attEntry.ext = att.ext
+              pageAtts.push(attEntry)
+              continue
             }
 
             if (att.type === 'location') {

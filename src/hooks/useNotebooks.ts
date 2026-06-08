@@ -168,6 +168,30 @@ export const useNotebooks = () => {
     init()
   }, [createNotebookInternal])
 
+  // 現在ページに遅延スタブ(loaded:false)の添付があれば、その場で実体化する。
+  // getNotebookは起動を速くするため現在ページ以外の画像/ファイルを読み込まないので、
+  // ページ移動のたびにここで対象ページぶんだけ復元する。
+  useEffect(() => {
+    if (!currentNotebook) return
+    const pageIdx = currentNotebook.currentPage - 1
+    const page = currentNotebook.pages[pageIdx]
+    if (!page?.attachments?.some(a => a.loaded === false)) return
+
+    let cancelled = false
+    const nbId = currentNotebook.id
+    void (async () => {
+      const loaded = await db.loadPageAttachments(nbId, page.attachments!)
+      if (cancelled) return
+      setCurrentNotebook(prev => {
+        if (!prev || prev.id !== nbId) return prev
+        const pages = [...prev.pages]
+        pages[pageIdx] = { ...pages[pageIdx], attachments: loaded }
+        return { ...prev, pages }
+      })
+    })()
+    return () => { cancelled = true }
+  }, [currentNotebook])
+
   // Public Actions
   const createNotebook = async () => {
     await createNotebookInternal()
@@ -258,8 +282,15 @@ export const useNotebooks = () => {
     return await db.searchAllNotebooks(query)
   }
 
-  // currentNotebook を変えずに実体を取得する（全冊エクスポート等で使用）
-  const getNotebookRaw = useCallback(async (id: string) => db.getNotebook(id), [])
+  // currentNotebook を変えずに実体を取得する（全冊エクスポート等で使用）。
+  // エクスポート用途なので遅延スタブも含め全添付を実体化して返す。
+  const getNotebookRaw = useCallback(async (id: string) => {
+    const nb = await db.getNotebook(id)
+    return nb ? db.hydrateNotebook(nb) : nb
+  }, [])
+
+  // 現在開いているノートの全添付を実体化する（ZIP/HTMLエクスポート前に使用）
+  const hydrateNotebook = useCallback(async (notebook: Notebook) => db.hydrateNotebook(notebook), [])
 
   const getMonthlyActivity = useCallback(async (year: number, month: number) => {
     try {
@@ -283,6 +314,7 @@ export const useNotebooks = () => {
     importNotebook,
     searchNotebooks,
     getNotebookRaw,
+    hydrateNotebook,
     getMonthlyActivity
   }
 }

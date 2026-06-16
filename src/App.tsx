@@ -578,7 +578,12 @@ function App() {
   // Swipe Handlers
   const swipeHandlers = useSwipeable({
     onSwipedLeft: handleNextPage,
-    onSwipedRight: () => {
+    onSwipedRight: (e) => {
+      // 画面左端から始まった右スワイプはメニューを開く（前ページ送りより優先）
+      if (e.initial[0] < 30) {
+        setIsMenuOpen(true)
+        return
+      }
       if (currentNotebook && currentNotebook.currentPage > 1) {
         handlePageChange(currentNotebook.currentPage - 1)
       }

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { FileText, Trash2, Download, Upload, PlusCircle, Image as ImageIcon, Type, LogIn, LogOut, Cloud, FileCode, Archive } from 'lucide-react'
+import { FileText, Trash2, Download, Upload, PlusCircle, Image as ImageIcon, Type, LogIn, LogOut, Cloud, FileCode, Archive, Database, ChevronLeft } from 'lucide-react'
 import type { NotebookMetadata, Notebook } from '../types'
 
 interface SyncInfo {
@@ -47,8 +47,15 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
-  
+  // メニュー内の表示画面: メイン / バックアップ
+  const [view, setView] = useState<'main' | 'backup'>('main')
+
   if (!isOpen) return null
+
+  const close = () => {
+    setView('main')
+    onClose()
+  }
 
   const handleBgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!currentNotebook || !e.target.files?.[0]) return
@@ -70,11 +77,56 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
     onUpdateNotebook({ ...currentNotebook, backgroundUri: undefined }, true)
   }
 
+  // バックアップ画面（エクスポート/インポートをここに集約）
+  if (view === 'backup') {
+    return (
+      <div className="menu-overlay" onClick={close}>
+        <div className="menu-content" onClick={(e) => e.stopPropagation()}>
+          <h2 className="menu-title-back" onClick={() => setView('main')}>
+            <ChevronLeft size={22} /> バックアップ
+          </h2>
+
+          <div className="menu-actions" style={{ flex: 1, overflowY: 'auto' }}>
+            <h3 className="menu-section-label">エクスポート（書き出し）</h3>
+            <button onClick={onExportHtml} className="action-btn">
+              <FileCode size={20} /> HTMLで保存（このノート）
+            </button>
+            <button onClick={onExportAllHtml} className="action-btn">
+              <Archive size={20} /> 全ノートをHTMLでバックアップ
+            </button>
+            <button onClick={onDownloadZip} className="action-btn">
+              <Download size={20} /> ZIPで保存（旧形式）
+            </button>
+
+            <h3 className="menu-section-label" style={{ marginTop: 8 }}>インポート（取り込み・復元）</h3>
+            <button onClick={() => importInputRef.current?.click()} className="action-btn">
+              <Upload size={20} /> HTML / ZIPから復元
+            </button>
+            <p className="menu-hint">
+              ↑で書き出したHTML / ZIPをここから読み込むと、ノートを丸ごと復元できます。
+            </p>
+
+            <input
+              type="file"
+              ref={importInputRef}
+              onChange={(e) => {
+                onImportZip(e)
+                if (importInputRef.current) importInputRef.current.value = ''
+              }}
+              accept=".html,.htm,.zip"
+              style={{ display: 'none' }}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="menu-overlay" onClick={onClose}>
+    <div className="menu-overlay" onClick={close}>
       <div className="menu-content" onClick={(e) => e.stopPropagation()}>
         <h2>メニュー</h2>
-        
+
         <div className="notebook-list-container">
           <h3>ノート一覧</h3>
           <ul className="notebook-list">
@@ -119,20 +171,8 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
             </button>
           )}
 
-          <button onClick={onExportHtml} className="action-btn">
-            <FileCode size={20} /> HTMLで保存（このノート）
-          </button>
-
-          <button onClick={onExportAllHtml} className="action-btn">
-            <Archive size={20} /> 全ノートをHTMLでバックアップ
-          </button>
-
-          <button onClick={() => importInputRef.current?.click()} className="action-btn">
-            <Upload size={20} /> HTML / ZIPから復元
-          </button>
-
-          <button onClick={onDownloadZip} className="action-btn">
-            <Download size={20} /> ZIPで保存（旧形式）
+          <button onClick={() => setView('backup')} className="action-btn">
+            <Database size={20} /> バックアップ（書き出し・復元）
           </button>
 
           <input
@@ -140,16 +180,6 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
             ref={bgInputRef}
             onChange={handleBgChange}
             accept="image/*"
-            style={{ display: 'none' }}
-          />
-          <input
-            type="file"
-            ref={importInputRef}
-            onChange={(e) => {
-              onImportZip(e)
-              if (importInputRef.current) importInputRef.current.value = ''
-            }}
-            accept=".html,.htm,.zip"
             style={{ display: 'none' }}
           />
         </div>

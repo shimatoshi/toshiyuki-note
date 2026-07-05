@@ -15,7 +15,7 @@ export default defineConfig({
         clientsClaim: true,
         sourcemap: false,
       },
-      includeAssets: ['apple-touch-icon.webp', 'icon.webp'],
+      includeAssets: ['apple-touch-icon.webp', 'icon.webp', 'debug-note.js'],
       manifest: {
         name: 'としゆきノート',
         short_name: 'としゆきNote',

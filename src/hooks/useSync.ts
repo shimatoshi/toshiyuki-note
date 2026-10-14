@@ -38,16 +38,17 @@ export function useSync(prepare: () => Promise<void>, refresh: () => Promise<voi
       // Wait for a pause in editing; never upload more than once per minute.
       timer = setTimeout(upload, Math.max(30000, 60000 - (Date.now() - lastAuto.current)))
     }
+    window.addEventListener('input',schedule)
     window.addEventListener('tn-local-saved',schedule)
     window.addEventListener('online',schedule)
-    // Login/startup restores other-device notes once; subsequent saves only upload.
-    timer = setTimeout(() => void runSync(false), 2500)
-    return () => { clearTimeout(timer);window.removeEventListener('tn-local-saved',schedule);window.removeEventListener('online',schedule) }
+    // A restored session never interrupts the editor; explicit login/manual sync can pull.
+    timer = setTimeout(upload, 30000)
+    return () => { clearTimeout(timer);window.removeEventListener('input',schedule);window.removeEventListener('tn-local-saved',schedule);window.removeEventListener('online',schedule) }
   }, [ready,user,runSync])
   const handleLogin = useCallback(async (username: string, password: string, register = false): Promise<string | null> => {
-    try { setUser(await cloudLogin(username,password,register));setError('');return null }
+    try { setUser(await cloudLogin(username,password,register));setError('');await runSync(false);return null }
     catch(e) { return e instanceof Error ? e.message : 'ログインに失敗しました' }
-  }, [])
+  }, [runSync])
   const handleLogout = useCallback(async () => {
     if (busy.current) return
     await cloudLogout();setUser(null);setStatus('');setError('')

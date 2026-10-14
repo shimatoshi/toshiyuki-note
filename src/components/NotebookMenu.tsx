@@ -218,6 +218,15 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
                 if (err) setLoginError(err)
                 else { setShowLogin(false); setLoginUsername(''); setLoginPassword('') }
               }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div role="group" aria-label="ログイン・ユーザー登録の選択" style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" aria-pressed={!register} disabled={loginBusy} className="action-btn" onClick={() => { setRegister(false); setLoginError(null) }} style={{ justifyContent: 'center', borderColor: !register ? 'var(--accent-color)' : undefined }}>
+                    ログイン
+                  </button>
+                  <button type="button" aria-pressed={register} disabled={loginBusy} className="action-btn" onClick={() => { setRegister(true); setLoginError(null) }} style={{ justifyContent: 'center', borderColor: register ? 'var(--accent-color)' : undefined }}>
+                    新規登録
+                  </button>
+                </div>
+                <p className="menu-hint">{register ? 'ユーザー名と10文字以上のパスワードでアカウントを作成します。' : '初めての方は、上の「新規登録」を選んでください。'}</p>
                 <input
                   type="text"
                   autoComplete="username"
@@ -246,9 +255,6 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
                   {loginBusy ? '接続中…' : register ? '登録して同期を開始' : 'ログインして同期を開始'}
                 </button>
                 <p className="menu-hint">ログインすると、この端末のノート・画像・位置情報をクラウドへ保存します。</p>
-                <button type="button" disabled={loginBusy} className="action-btn" onClick={() => { setRegister(!register); setLoginError(null) }}>
-                  {register ? '登録済みの方：ログイン' : '初めての方：ユーザー登録'}
-                </button>
                 <button type="button" onClick={() => setShowLogin(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
                   キャンセル
                 </button>

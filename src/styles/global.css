@@ -369,6 +369,12 @@ textarea.ruled {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.menu-content > * {
+  flex-shrink: 0;
 }
 
 .menu-content h2 {

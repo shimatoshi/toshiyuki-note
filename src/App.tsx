@@ -595,7 +595,7 @@ function App() {
   const attachments = currentPageData.attachments || []
 
   return (
-    <div className="app-container">
+    <div className="app-container" inert={isSyncing}>
       {isSyncing && <div className="cloud-sync-mask" role="status" aria-live="polite">クラウドと同期中…</div>}
       <Header
         title={currentNotebook.title}
@@ -664,6 +664,7 @@ function App() {
         )}
         <textarea
           ref={textareaRef}
+          disabled={isSyncing}
           value={currentPageData.content}
           onChange={(e) => handleContentChange(e.target.value)}
           onPaste={handlePaste}

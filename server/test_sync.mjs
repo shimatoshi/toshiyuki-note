@@ -38,7 +38,7 @@ try {
   await start()
   const a=await device();a.db.set(nb.id,structuredClone(nb))
   await a.run(c=>c.cloudLogin('testuser','test-password-123',true))
-  await a.run(c=>c.syncCloud())
+  await a.run(c=>c.syncCloud(true))
   const b=await device();await b.run(c=>c.cloudLogin('testuser','test-password-123'))
   await b.run(c=>c.syncCloud())
   assert.equal(b.db.get(nb.id).pages[0].content,'本文A')
@@ -53,7 +53,12 @@ try {
   // Concurrent edits retain both versions, including binary attachments.
   a.db.get(nb.id).pages[0].content='A concurrent'
   b.db.get(nb.id).pages[0].content='B concurrent'
-  await b.run(c=>c.syncCloud());await a.run(c=>c.syncCloud())
+  await b.run(c=>c.syncCloud())
+  const automatic = await a.run(c=>c.syncCloud(true))
+  assert.equal(a.db.get(nb.id).pages[0].content,'A concurrent')
+  assert.equal(a.db.size,1)
+  assert.match(automatic,/他端末の変更/)
+  await a.run(c=>c.syncCloud())
   assert.equal(a.db.get(nb.id).pages[0].content,'B concurrent')
   assert.ok([...a.db.values()].some(n=>n.title.endsWith('（競合コピー）') && n.pages[0].content==='A concurrent'))
   await b.run(c=>c.syncCloud());assert.equal(b.db.size,2)
@@ -64,5 +69,5 @@ try {
   // Account ownership stays isolated when a second account uses the same device.
   await a.run(c=>c.cloudLogout());await a.run(c=>c.cloudLogin('anotheruser','test-password-456',true));await a.run(c=>c.syncCloud())
   const c=await device();await c.run(x=>x.cloudLogin('anotheruser','test-password-456'));await c.run(x=>x.syncCloud());assert.equal(c.db.size,0)
-  console.log('PASS: image/GPS restoration, offline retry, restart durability, concurrent edit copies, deletion propagation, account isolation')
+  console.log('PASS: non-disruptive background upload, deferred remote changes, image/GPS restoration, offline retry, restart durability, concurrent edit copies, deletion propagation, account isolation')
 } finally { if(proc?.exitCode===null)await stop();await rm(tmp,{recursive:true,force:true}) }

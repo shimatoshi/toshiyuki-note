@@ -23,7 +23,7 @@ function baseKey(user: CloudUser) { return `tn-cloud-baseline-v1:${user.id}` }
 function owners(): Record<string, string> { return readStored<Record<string,string>>(OWNER_KEY, {}) }
 export function recordLocalDeletion(id: string) {
   const deleted: Record<string, string> = readStored<Record<string,string>>(DELETED_KEY, {})
-  const owner = owners()[id]
+  const owner = owners()[id] || session?.user.id
   if (owner) { deleted[id] = owner; localStorage.setItem(DELETED_KEY, JSON.stringify(deleted)) }
 }
 async function resolveEndpoint() {
@@ -89,12 +89,12 @@ function restore(nb: WireNotebook): Notebook {
     return { ...a, loaded:true, data: new Blob([bytes], {type: a.mimeType || header.match(/^data:(.*);base64$/)?.[1] || 'application/octet-stream'}) }
   }) })) }
 }
-export function syncCloud(): Promise<string> {
+export function syncCloud(uploadOnly = false): Promise<string> {
   if (running) return running
-  running = performSync().finally(() => { running = null })
+  running = performSync(uploadOnly).finally(() => { running = null })
   return running
 }
-async function performSync(): Promise<string> {
+async function performSync(uploadOnly: boolean): Promise<string> {
   const active = session
   if (!active) throw new Error('ログインしてください')
   await resolveEndpoint()
@@ -102,14 +102,18 @@ async function performSync(): Promise<string> {
   const baseline: Record<string, Baseline> = readStored<Record<string,Baseline>>(baseKey(active.user), {})
   const owner = owners()
   const deleted: Record<string,string> = readStored<Record<string,string>>(DELETED_KEY, {})
+  const originalDeleted = new Set(Object.keys(deleted))
   const checkpoint = () => {
     localStorage.setItem(baseKey(active.user),JSON.stringify(baseline))
-    localStorage.setItem(OWNER_KEY,JSON.stringify(owner))
-    localStorage.setItem(DELETED_KEY,JSON.stringify(deleted))
+    localStorage.setItem(OWNER_KEY,JSON.stringify({ ...owners(), ...owner }))
+    // Background uploads may overlap a local deletion; retain newly queued tombstones.
+    const currentDeleted = readStored<Record<string,string>>(DELETED_KEY, {})
+    for (const id of originalDeleted) if (!(id in deleted)) delete currentDeleted[id]
+    localStorage.setItem(DELETED_KEY,JSON.stringify({ ...currentDeleted, ...deleted }))
   }
   const remote = new Map((await request<{notebooks:RemoteMeta[]}>('/notebooks')).notebooks.map(n => [n.id,n]))
   const local = new Map((await fileDb.getAllMetadata()).map(n => [n.id,n]))
-  let uploaded = 0, downloaded = 0, conflicts = 0
+  let uploaded = 0, downloaded = 0, conflicts = 0, deferred = 0
   const upload = async (id: string, nb: WireNotebook, version: number) => {
     const result = await request<{version:number}>('/notebooks/'+id,'PUT',{version,notebook:nb})
     baseline[id] = { version:result.version,digest:await digest(nb) };owner[id]=active.user.id;uploaded++;checkpoint()
@@ -134,6 +138,7 @@ async function performSync(): Promise<string> {
         await request('/notebooks/'+id,'DELETE',{version:r.version});delete baseline[id];delete deleted[id];checkpoint();continue
       }
       if (!r || r.deleted) { delete baseline[id];delete deleted[id];checkpoint();continue }
+      if (uploadOnly) { deferred++;continue }
       // Concurrent remote edit wins over a local deletion; restore it below.
       delete deleted[id];checkpoint()
     }
@@ -143,6 +148,7 @@ async function performSync(): Promise<string> {
     const changed = !!snapshot && (!b || hash !== b.digest)
     if (!r) { if(snapshot) await upload(id,snapshot,0);continue }
     if (r.deleted) {
+      if (uploadOnly) { deferred++;continue }
       if (changed && snapshot) await fork(snapshot)
       if (nb) { await unchanged(id,hash);await fileDb.deleteNotebook(id) }
       delete baseline[id];checkpoint();continue
@@ -152,6 +158,7 @@ async function performSync(): Promise<string> {
       // Missing local content is recovered; never infer deletion from absence.
       if (snapshot) continue
     }
+    if (uploadOnly) { deferred++;continue }
     const result = await request<{version:number;notebook:WireNotebook}>('/notebooks/'+id)
     const remoteHash = await digest(result.notebook)
     if (snapshot && hash === remoteHash) {
@@ -162,5 +169,6 @@ async function performSync(): Promise<string> {
     await fileDb.saveNotebook(restore(result.notebook))
     baseline[id]={version:result.version,digest:remoteHash};owner[id]=active.user.id;downloaded++;checkpoint()
   }
+  if (uploadOnly) return `自動アップロード完了：${uploaded}冊${deferred ? '・他端末の変更があります。「今すぐ同期」で取得してください' : ''}`
   return `同期完了：アップロード${uploaded}冊・取得${downloaded}冊${conflicts ? `・競合コピー${conflicts}冊` : ''}`
 }

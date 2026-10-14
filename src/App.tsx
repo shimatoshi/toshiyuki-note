@@ -39,7 +39,7 @@ function App() {
   } = useNotebooks()
 
   const {
-    user, isConnected, isSyncing, status, error,
+    user, isConnected, isSyncing, isBlocking, status, error,
     handleLogin, handleLogout, handleSync,
   } = useSync(flushSaves, refreshFromStorage, !isLoading)
 
@@ -595,8 +595,8 @@ function App() {
   const attachments = currentPageData.attachments || []
 
   return (
-    <div className="app-container" inert={isSyncing}>
-      {isSyncing && <div className="cloud-sync-mask" role="status" aria-live="polite">クラウドと同期中…</div>}
+    <div className="app-container" inert={isBlocking}>
+      {isBlocking && <div className="cloud-sync-mask" role="status" aria-live="polite">クラウドと同期中…</div>}
       <Header
         title={currentNotebook.title}
         onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
@@ -664,7 +664,7 @@ function App() {
         )}
         <textarea
           ref={textareaRef}
-          disabled={isSyncing}
+          disabled={isBlocking}
           value={currentPageData.content}
           onChange={(e) => handleContentChange(e.target.value)}
           onPaste={handlePaste}

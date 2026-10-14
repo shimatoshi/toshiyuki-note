@@ -1,0 +1,19 @@
+#!/bin/bash
+set -eu
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+DATA="${NOTE_DATA_DIR:-$HOME/.local/share/toshiyuki-note}"
+mkdir -p "$DATA"
+case "${1:-status}" in
+up)
+ if [ -f "$DATA/supervisor.pid" ] && kill -0 "$(cat "$DATA/supervisor.pid")" 2>/dev/null; then echo 'already running'; exit 0; fi
+ nohup python3 "$ROOT/supervisor.py" >>"$DATA/supervisor.log" 2>&1 </dev/null &
+ echo 'starting';;
+down)
+ if [ -f "$DATA/supervisor.pid" ]; then kill "$(cat "$DATA/supervisor.pid")"; fi;;
+status)
+ if [ -f "$DATA/supervisor.pid" ] && kill -0 "$(cat "$DATA/supervisor.pid")" 2>/dev/null; then echo 'running'; else echo 'stopped'; fi
+ curl -fsS http://127.0.0.1:8420/health || true
+ [ ! -f "$DATA/endpoint" ] || cat "$DATA/endpoint";;
+log) tail -n 40 "$DATA/supervisor.log";;
+*) echo 'NoteCloud up|down|status|log';exit 2;;
+esac

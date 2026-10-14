@@ -21,6 +21,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test SQLite API and offline synchronization
+        run: |
+          python3 -m unittest discover -s server -p 'test_*.py'
+          node server/test_sync.mjs
+
       # tsc -b && vite build。型エラー or ビルド失敗で CI を落とす。
       - name: Build
         run: npm run build

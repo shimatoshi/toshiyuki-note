@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { TOTAL_PAGES } from '../types'
 import type { Notebook, NotebookMetadata, Page } from '../types'
 import { fileDb, initStorage, migrateFromIndexedDB } from '../fileStorage'
+import { recordLocalDeletion } from '../lib/cloud'
 
 // Use file-based storage
 const db = fileDb
@@ -80,18 +81,30 @@ export const useNotebooks = () => {
   // ノートIDごとの遅延保存タイマー
   const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
+  const queuedRef = useRef(new Map<string, Notebook>())
+  const writeChainRef = useRef(Promise.resolve())
+  const currentRef = useRef(currentNotebook)
+  currentRef.current = currentNotebook
+
   // すべての保存をこの一箇所に通す。成功/失敗でsaveErrorを更新し、
   // 失敗時は保留ノートを保持してretrySaveで再送できるようにする。
   const persist = useCallback(async (notebook: Notebook): Promise<void> => {
-    try {
-      await db.saveNotebook(notebook)
-      pendingSaveRef.current = null
-      setSaveError(false)
-    } catch (e) {
-      console.error('Save failed', e)
-      pendingSaveRef.current = notebook
-      setSaveError(true)
-    }
+    if (!queuedRef.current.has(notebook.id)) queuedRef.current.set(notebook.id, notebook)
+    const write = writeChainRef.current.then(async () => {
+      try {
+        await db.saveNotebook(notebook)
+        if (queuedRef.current.get(notebook.id) === notebook) queuedRef.current.delete(notebook.id)
+        pendingSaveRef.current = null
+        setSaveError(false)
+        window.dispatchEvent(new Event('tn-local-saved'))
+      } catch (e) {
+        pendingSaveRef.current = notebook
+        setSaveError(true)
+        throw e
+      }
+    })
+    writeChainRef.current = write.catch(() => {})
+    await write.catch(e => console.error('Save failed', e))
   }, [])
 
   const retrySave = useCallback(async () => {
@@ -220,7 +233,14 @@ export const useNotebooks = () => {
     
     if (!confirm('このノートを削除しますか？\n(復元できません)')) return
 
+    const timer = saveTimersRef.current.get(id)
+    if (timer) clearTimeout(timer)
+    saveTimersRef.current.delete(id)
+    queuedRef.current.delete(id)
+    await writeChainRef.current
     await db.deleteNotebook(id)
+    recordLocalDeletion(id)
+    window.dispatchEvent(new Event('tn-local-saved'))
     
     const newNotebooks = notebooks.filter(n => n.id !== id)
     setNotebooks(newNotebooks)
@@ -232,6 +252,7 @@ export const useNotebooks = () => {
   }
 
   const updateNotebook = async (notebook: Notebook, immediate = false) => {
+    queuedRef.current.set(notebook.id, notebook)
     // 1. UIを即座に更新 (サクサク感)
     setCurrentNotebook(notebook)
 
@@ -301,7 +322,30 @@ export const useNotebooks = () => {
     }
   }, [])
 
+  const flushSaves = useCallback(async () => {
+    for (const timer of saveTimersRef.current.values()) clearTimeout(timer)
+    saveTimersRef.current.clear()
+    for (const nb of queuedRef.current.values()) await persist(nb)
+    await writeChainRef.current
+    if (pendingSaveRef.current) {
+      await persist(pendingSaveRef.current)
+      if (pendingSaveRef.current) throw new Error('端末への保存に失敗しました。同期を中止しました')
+    }
+  }, [persist])
+
+  const refreshFromStorage = useCallback(async () => {
+    const all = await db.getAllMetadata()
+    setNotebooks(all)
+    const id = currentRef.current?.id
+    const nb = id ? await db.getNotebook(id) : undefined
+    if (nb) setCurrentNotebook(nb)
+    else if (all.length) setCurrentNotebook(await db.getNotebook(all[0].id) ?? null)
+    else await createNotebookInternal()
+  }, [createNotebookInternal])
+
   return {
+    flushSaves,
+    refreshFromStorage,
     notebooks,
     currentNotebook,
     isLoading,

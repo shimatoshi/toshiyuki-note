@@ -5,8 +5,11 @@ import type { NotebookMetadata, Notebook } from '../types'
 interface SyncInfo {
   isConnected: boolean
   profileName: string | null
-  supabaseAvailable: boolean
-  onLogin: (email: string, password: string) => Promise<string | null>
+  isSyncing: boolean
+  status: string
+  error: string
+  onSync: () => Promise<void>
+  onLogin: (username: string, password: string, register?: boolean) => Promise<string | null>
   onLogout: () => void
 }
 
@@ -44,7 +47,9 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
   const bgInputRef = useRef<HTMLInputElement>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
   const [showLogin, setShowLogin] = useState(false)
-  const [loginEmail, setLoginEmail] = useState('')
+  const [loginUsername, setLoginUsername] = useState('')
+  const [register, setRegister] = useState(false)
+  const [loginBusy, setLoginBusy] = useState(false)
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   // メニュー内の表示画面: メイン / バックアップ
@@ -184,17 +189,22 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
           />
         </div>
 
-        {sync?.supabaseAvailable && (
+        {sync && (
           <div className="menu-actions" style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
             <h3 style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-              としゆきアカウント
+              クラウド同期
             </h3>
             {sync.isConnected ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', fontSize: 14, color: 'var(--accent-color)' }}>
-                  <Cloud size={16} /> {sync.profileName} (連携中)
+                  <Cloud size={16} /> {sync.profileName} （ログイン中）
                 </div>
-                <button onClick={sync.onLogout} className="action-btn" style={{ color: 'var(--danger-color)' }}>
+                <p className="menu-hint" role="status">{sync.status || 'この端末のノートをクラウドへ同期します。'}</p>
+                {sync.error && <p role="alert" style={{ color: 'var(--danger-color)' }}>{sync.error}</p>}
+                <button disabled={sync.isSyncing} onClick={() => void sync.onSync()} className="action-btn">
+                  <Cloud size={20} /> 今すぐアップロード・同期
+                </button>
+                <button disabled={sync.isSyncing} onClick={sync.onLogout} className="action-btn" style={{ color: 'var(--danger-color)' }}>
                   <LogOut size={20} /> ログアウト
                 </button>
               </>
@@ -202,29 +212,42 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
               <form onSubmit={async (e) => {
                 e.preventDefault()
                 setLoginError(null)
-                const err = await sync.onLogin(loginEmail, loginPassword)
+                setLoginBusy(true)
+                const err = await sync.onLogin(loginUsername, loginPassword, register)
+                setLoginBusy(false)
                 if (err) setLoginError(err)
-                else { setShowLogin(false); setLoginEmail(''); setLoginPassword('') }
+                else { setShowLogin(false); setLoginUsername(''); setLoginPassword('') }
               }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={e => setLoginEmail(e.target.value)}
-                  placeholder="メールアドレス"
+                  type="text"
+                  autoComplete="username"
+                  aria-label="ユーザー名"
+                  value={loginUsername}
+                  onChange={e => setLoginUsername(e.target.value)}
+                  placeholder="ユーザー名"
+                  minLength={2}
+                  maxLength={40}
                   required
                   style={{ background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '10px', borderRadius: 6, fontSize: 16 }}
                 />
                 <input
                   type="password"
+                  autoComplete={register ? "new-password" : "current-password"}
+                  aria-label="パスワード"
+                  minLength={10}
                   value={loginPassword}
                   onChange={e => setLoginPassword(e.target.value)}
-                  placeholder="パスワード"
+                  placeholder="パスワード（10文字以上）"
                   required
                   style={{ background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '10px', borderRadius: 6, fontSize: 16 }}
                 />
                 {loginError && <div style={{ color: 'var(--danger-color)', fontSize: 13 }}>{loginError}</div>}
-                <button type="submit" className="action-btn" style={{ justifyContent: 'center' }}>
-                  ログイン
+                <button type="submit" disabled={loginBusy} className="action-btn" style={{ justifyContent: 'center' }}>
+                  {loginBusy ? '接続中…' : register ? '登録して同期を開始' : 'ログインして同期を開始'}
+                </button>
+                <p className="menu-hint">ログインすると、この端末のノート・画像・位置情報をクラウドへ保存します。</p>
+                <button type="button" disabled={loginBusy} className="action-btn" onClick={() => { setRegister(!register); setLoginError(null) }}>
+                  {register ? '登録済みの方：ログイン' : '初めての方：ユーザー登録'}
                 </button>
                 <button type="button" onClick={() => setShowLogin(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
                   キャンセル
@@ -232,7 +255,7 @@ export const NotebookMenu: React.FC<NotebookMenuProps> = ({
               </form>
             ) : (
               <button onClick={() => setShowLogin(true)} className="action-btn">
-                <LogIn size={20} /> カレンダーと連携
+                <LogIn size={20} /> ログイン・ユーザー登録
               </button>
             )}
           </div>

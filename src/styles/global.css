@@ -822,3 +822,5 @@ textarea.ruled {
   font-size: 14px;
 }
 
+
+.cloud-sync-mask { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); color: white; font-size: 16px; cursor: wait; }

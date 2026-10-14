@@ -170,7 +170,7 @@ async function decodeAttachment(notebookId: string, att: ManifestEntry): Promise
       const dataUrl = `data:${mimeType};base64,${result.data as string}`
       attachment.data = dataUrlToBlob(dataUrl)
     } catch {
-      attachment.data = new Blob()
+      throw new Error('添付ファイルを読み込めません: ' + att.id)
     }
   }
   return attachment
@@ -430,6 +430,7 @@ export const fileDb = {
       await removeFromIndex(id)
     } catch (e) {
       console.error('deleteNotebook error', e)
+      throw e
     }
   },
 

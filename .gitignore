@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Python API runtime files
+__pycache__/
+*.pyc
+*.sqlite3

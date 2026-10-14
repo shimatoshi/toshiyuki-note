@@ -35,13 +35,13 @@ function App() {
     searchNotebooks,
     getNotebookRaw,
     hydrateNotebook,
-    getMonthlyActivity
+    getMonthlyActivity, flushSaves, refreshFromStorage
   } = useNotebooks()
 
   const {
-    profile, isConnected, supabaseAvailable,
-    handleLogin, handleLogout, syncNoteRecord,
-  } = useSync()
+    user, isConnected, isSyncing, status, error,
+    handleLogin, handleLogout, handleSync,
+  } = useSync(flushSaves, refreshFromStorage, !isLoading)
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -89,10 +89,7 @@ function App() {
     const updatedNotebook = { ...currentNotebook, pages: newPages }
     updateNotebook(updatedNotebook)
 
-    // カレンダー連携: ログイン中ならnote_recordsを同期
-    if (isConnected) {
-      syncNoteRecord(updatedNotebook, pageIndex)
-    }
+
   }
 
   const handleRename = (newTitle: string) => {
@@ -599,6 +596,7 @@ function App() {
 
   return (
     <div className="app-container">
+      {isSyncing && <div className="cloud-sync-mask" role="status" aria-live="polite">クラウドと同期中…</div>}
       <Header
         title={currentNotebook.title}
         onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
@@ -627,8 +625,8 @@ function App() {
         onUpdateNotebook={updateNotebook}
         sync={{
           isConnected,
-          profileName: profile?.display_name ?? null,
-          supabaseAvailable,
+          profileName: user?.username ?? null,
+          isSyncing, status, error, onSync: handleSync,
           onLogin: handleLogin,
           onLogout: handleLogout,
         }}

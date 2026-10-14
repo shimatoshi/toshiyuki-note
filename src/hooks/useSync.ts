@@ -1,111 +1,44 @@
-import { useState, useEffect, useCallback } from 'react'
-import type { User } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
-import type { Notebook } from '../types'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { cloudSession, cloudLogin, cloudLogout, syncCloud } from '../lib/cloud'
 
-interface Profile {
-  id: string
-  display_name: string
-}
-
-export function useSync() {
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [defaultCalendarId, setDefaultCalendarId] = useState<string | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
-
-  const loadProfile = useCallback(async (userId: string) => {
-    if (!supabase) return
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (data) {
-      setProfile(data)
-      // デフォルトのカレンダーを取得（個人カレンダーの最初のもの）
-      const { data: calendars } = await supabase
-        .from('calendars')
-        .select('id')
-        .eq('owner_id', userId)
-        .limit(1)
-      if (calendars && calendars.length > 0) {
-        setDefaultCalendarId(calendars[0].id)
-      }
-      setIsConnected(true)
+export function useSync(prepare: () => Promise<void>, refresh: () => Promise<void>, ready: boolean) {
+  const [user, setUser] = useState(cloudSession()?.user ?? null)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const busy = useRef(false)
+  const callbacks = useRef({prepare,refresh,ready})
+  useEffect(() => { callbacks.current = {prepare,refresh,ready} }, [prepare,refresh,ready])
+  const handleSync = useCallback(async () => {
+    if (busy.current || !callbacks.current.ready || !cloudSession()) return
+    busy.current = true;setIsSyncing(true);setError('');setStatus('同期中…')
+    try {
+      await callbacks.current.prepare()
+      setStatus(await syncCloud())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '同期に失敗しました');setStatus('未同期の変更は端末に保存されています')
+    } finally {
+      await callbacks.current.refresh().catch(() => {})
+      busy.current=false;setIsSyncing(false)
     }
   }, [])
-
   useEffect(() => {
-    if (!supabase) return
-    const sb = supabase
-
-    const init = async () => {
-      const { data: { session } } = await sb.auth.getSession()
-      if (session?.user) {
-        setUser(session.user)
-        await loadProfile(session.user.id)
-      }
-    }
-    init()
-
-    const { data: { subscription } } = sb.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        await loadProfile(session.user.id)
-      } else {
-        setProfile(null)
-        setDefaultCalendarId(null)
-        setIsConnected(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [loadProfile])
-
-  const handleLogin = useCallback(async (email: string, password: string): Promise<string | null> => {
-    if (!supabase) return 'Supabaseが設定されていません'
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return error ? error.message : null
+    if (!ready || !user) return
+    let timer: ReturnType<typeof setTimeout>
+    const schedule = () => { clearTimeout(timer);timer=setTimeout(() => void handleSync(),2500) }
+    // Local writes debounce uploads; reconnect and manual sync also pull other devices.
+    window.addEventListener('tn-local-saved',schedule)
+    window.addEventListener('online',schedule)
+    schedule()
+    return () => { clearTimeout(timer);window.removeEventListener('tn-local-saved',schedule);window.removeEventListener('online',schedule) }
+  }, [ready,user,handleSync])
+  const handleLogin = useCallback(async (username: string, password: string, register = false): Promise<string | null> => {
+    try { setUser(await cloudLogin(username,password,register));setError('');return null }
+    catch(e) { return e instanceof Error ? e.message : 'ログインに失敗しました' }
   }, [])
-
   const handleLogout = useCallback(async () => {
-    if (!supabase) return
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-    setDefaultCalendarId(null)
-    setIsConnected(false)
+    if (busy.current) return
+    await cloudLogout();setUser(null);setStatus('');setError('')
   }, [])
-
-  // ノート保存時にnote_recordsへ同期
-  const syncNoteRecord = useCallback(async (notebook: Notebook, pageIndex: number) => {
-    if (!supabase || !user || !defaultCalendarId) return
-
-    const page = notebook.pages[pageIndex]
-    if (!page || !page.content.trim()) return
-
-    const contentPreview = page.content.slice(0, 100)
-
-    await supabase
-      .from('note_records')
-      .upsert({
-        user_id: user.id,
-        calendar_id: defaultCalendarId,
-        notebook_id: notebook.id,
-        notebook_title: notebook.title,
-        page_number: page.pageNumber,
-        content_preview: contentPreview,
-        recorded_at: page.lastModified,
-        synced_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id,notebook_id,page_number',
-      })
-  }, [user, defaultCalendarId])
-
-  return {
-    user, profile, isConnected,
-    supabaseAvailable: !!supabase,
-    handleLogin, handleLogout, syncNoteRecord,
-  }
+  return { user, isConnected:!!user, isSyncing, status, error, handleLogin, handleLogout, handleSync }
 }

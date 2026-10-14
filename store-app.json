@@ -1,0 +1,11 @@
+{
+  "id": "toshiyuki-note",
+  "type": "pwa",
+  "app": {
+    "name": "としゆきノート",
+    "icon": "https://raw.githubusercontent.com/shimatoshi/app-store-releases/main/icons/toshiyuki-note.png",
+    "description": "100ページのシンプルなノートアプリ",
+    "category": "生産性",
+    "url": "https://toshiyuki-note.vercel.app"
+  }
+}
